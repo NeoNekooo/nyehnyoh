@@ -20,16 +20,21 @@ const getTitle = (attributes) => {
 
 // 1. HOME FEED (TRENDING/POPULAR)
 app.get('/api/manga/popular', async (req, res) => {
+    const { nsfw } = req.query;
     try {
-        const cachedData = cache.get("popular");
+        const cachedKey = `popular_${nsfw}`;
+        const cachedData = cache.get(cachedKey);
         if (cachedData) return res.json({ status: "success", data: cachedData });
+
+        const ratings = ['safe', 'suggestive'];
+        if (nsfw === 'true') ratings.push('erotica', 'pornographic');
 
         const response = await axios.get(`${MANGADEX_API}/manga`, {
             params: {
                 limit: 50,
                 'includes[]': 'cover_art',
                 'order[followedCount]': 'desc',
-                'contentRating[]': ['safe', 'suggestive']
+                'contentRating[]': ratings
             }
         });
 
@@ -53,16 +58,21 @@ app.get('/api/manga/popular', async (req, res) => {
 
 // 2. LATEST UPDATES (BARU UPDATE CHAPTER)
 app.get('/api/manga/latest', async (req, res) => {
+    const { nsfw } = req.query;
     try {
-        const cachedData = cache.get("latest");
+        const cachedKey = `latest_${nsfw}`;
+        const cachedData = cache.get(cachedKey);
         if (cachedData) return res.json({ status: "success", data: cachedData });
+
+        const ratings = ['safe', 'suggestive'];
+        if (nsfw === 'true') ratings.push('erotica', 'pornographic');
 
         const response = await axios.get(`${MANGADEX_API}/manga`, {
             params: {
                 limit: 50,
                 'includes[]': 'cover_art',
                 'order[latestUploadedChapter]': 'desc',
-                'contentRating[]': ['safe', 'suggestive']
+                'contentRating[]': ratings
             }
         });
 
@@ -86,14 +96,17 @@ app.get('/api/manga/latest', async (req, res) => {
 
 // 2. SEARCH MANGA
 app.get('/api/manga/search', async (req, res) => {
-    const { q } = req.query;
+    const { q, nsfw } = req.query;
     try {
+        const ratings = ['safe', 'suggestive'];
+        if (nsfw === 'true') ratings.push('erotica', 'pornographic');
+
         const response = await axios.get(`${MANGADEX_API}/manga`, {
             params: {
                 title: q,
                 limit: 20,
                 'includes[]': 'cover_art',
-                'contentRating[]': ['safe', 'suggestive']
+                'contentRating[]': ratings
             }
         });
 
