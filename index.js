@@ -4,13 +4,19 @@ const cors = require('cors');
 const NodeCache = require('node-cache');
 
 const app = express();
-const cache = new NodeCache({ stdTTL: 600 }); // Cache 10 menit
+const cache = new NodeCache({ stdTTL: 600 });
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
 const MANGADEX_API = 'https://api.mangadex.org';
+
+// Fungsi Proxy biar gak diblokir ISP
+const proxyImg = (url) => {
+    if (!url) return null;
+    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&default=${encodeURIComponent(url)}`;
+};
 
 const GENRES = {
     'Action': '391b0423-db2a-4b90-b076-581e053926bd',
@@ -29,7 +35,6 @@ const getTitle = (attributes) => {
     return attributes.title.en || attributes.title.ja || attributes.title['ja-ro'] || Object.values(attributes.title)[0];
 };
 
-// 1. HOME FEED (TRENDING/POPULAR)
 app.get('/api/manga/popular', async (req, res) => {
     const { nsfw, tag } = req.query;
     try {
@@ -46,20 +51,17 @@ app.get('/api/manga/popular', async (req, res) => {
             'order[followedCount]': 'desc',
             'contentRating[]': ratings
         };
-
-        if (tag && GENRES[tag]) {
-            params['includedTags[]'] = [GENRES[tag]];
-        }
+        if (tag && GENRES[tag]) params['includedTags[]'] = [GENRES[tag]];
 
         const response = await axios.get(`${MANGADEX_API}/manga`, { params });
-
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
+            const originalUrl = fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null;
             return {
                 id: m.id,
                 title: getTitle(m.attributes),
-                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                coverUrl: proxyImg(originalUrl),
                 status: m.attributes.status
             };
         });
@@ -71,7 +73,6 @@ app.get('/api/manga/popular', async (req, res) => {
     }
 });
 
-// 2. LATEST UPDATES
 app.get('/api/manga/latest', async (req, res) => {
     const { nsfw, tag } = req.query;
     try {
@@ -88,20 +89,17 @@ app.get('/api/manga/latest', async (req, res) => {
             'order[latestUploadedChapter]': 'desc',
             'contentRating[]': ratings
         };
-
-        if (tag && GENRES[tag]) {
-            params['includedTags[]'] = [GENRES[tag]];
-        }
+        if (tag && GENRES[tag]) params['includedTags[]'] = [GENRES[tag]];
 
         const response = await axios.get(`${MANGADEX_API}/manga`, { params });
-
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
+            const originalUrl = fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null;
             return {
                 id: m.id,
                 title: getTitle(m.attributes),
-                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                coverUrl: proxyImg(originalUrl),
                 status: m.attributes.status
             };
         });
@@ -113,114 +111,85 @@ app.get('/api/manga/latest', async (req, res) => {
     }
 });
 
-// 3. SEARCH
 app.get('/api/manga/search', async (req, res) => {
     const { q, nsfw } = req.query;
     try {
         const ratings = ['safe', 'suggestive'];
         if (nsfw === 'true') ratings.push('erotica', 'pornographic');
-
         const response = await axios.get(`${MANGADEX_API}/manga`, {
-            params: {
-                title: q,
-                limit: 20,
-                'includes[]': 'cover_art',
-                'contentRating[]': ratings
-            }
+            params: { title: q, limit: 20, 'includes[]': 'cover_art', 'contentRating[]': ratings }
         });
-
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
+            const originalUrl = fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null;
             return {
                 id: m.id,
                 title: getTitle(m.attributes),
-                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                coverUrl: proxyImg(originalUrl),
                 status: m.attributes.status
             };
         });
-
         res.json({ status: "success", data: mangaList });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
 });
 
-// 4. DETAIL
 app.get('/api/manga/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/manga/${id}`, {
-            params: { 'includes[]': 'cover_art' }
-        });
+        const response = await axios.get(`${MANGADEX_API}/manga/${id}`, { params: { 'includes[]': 'cover_art' } });
         const m = response.data.data;
         const coverRel = m.relationships.find(r => r.type === 'cover_art');
         const fileName = coverRel ? coverRel.attributes?.fileName : null;
-
+        const originalUrl = fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.512.jpg` : null;
         const detail = {
             id: m.id,
             title: getTitle(m.attributes),
             description: m.attributes.description.en || Object.values(m.attributes.description)[0],
-            coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.512.jpg` : null,
+            coverUrl: proxyImg(originalUrl),
             status: m.attributes.status,
             tags: m.attributes.tags.map(t => t.attributes.name.en)
         };
-
         res.json({ status: "success", data: detail });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
 });
 
-// 5. CHAPTERS
 app.get('/api/manga/:id/chapters', async (req, res) => {
     const { id } = req.params;
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${id}/feed`, {
-            params: {
-                'translatedLanguage[]': ['id', 'en'],
-                'order[chapter]': 'asc',
-                limit: 500,
-                'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic']
-            }
+            params: { 'translatedLanguage[]': ['id', 'en'], 'order[chapter]': 'asc', limit: 500, 'contentRating[]': ['safe', 'suggestive', 'erotica', 'pornographic'] }
         });
-
         const chapters = response.data.data.map(c => ({
             id: c.id,
             chapter: c.attributes.chapter,
             title: c.attributes.title || `Chapter ${c.attributes.chapter}`,
             language: c.attributes.translatedLanguage
         }));
-
         res.json({ status: "success", data: chapters });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
 });
 
-// 6. IMAGES (Pake Data Saver biar lebih cepet & aman dari blokir)
 app.get('/api/chapter/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`, {
-            timeout: 10000 // 10 detik timeout
-        });
+        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`, { timeout: 10000 });
         const { baseUrl, chapter } = response.data;
-        
-        // Gunakan dataSaver untuk kecepatan dan kompatibilitas lebih baik
-        const images = chapter.dataSaver.map(img => `${baseUrl}/data-saver/${chapter.hash}/${img}`);
-        
-        if (images.length === 0) {
-            return res.status(404).json({ status: "error", message: "Chapter ini tidak punya gambar" });
-        }
-
+        // Pake Data Saver + Proxy Weserv buat nembus blokir ISP
+        const images = chapter.dataSaver.map(img => {
+            const originalUrl = `${baseUrl}/data-saver/${chapter.hash}/${img}`;
+            return proxyImg(originalUrl);
+        });
         res.json({ status: "success", data: images });
     } catch (error) {
-        console.error("Error fetch images:", error.message);
-        res.status(500).json({ status: "error", message: "Gagal ambil gambar dari server MangaDex" });
+        res.status(500).json({ status: "error", message: error.message });
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
