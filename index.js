@@ -26,7 +26,7 @@ app.get('/api/manga/popular', async (req, res) => {
 
         const response = await axios.get(`${MANGADEX_API}/manga`, {
             params: {
-                limit: 15,
+                limit: 50,
                 'includes[]': 'cover_art',
                 'order[followedCount]': 'desc',
                 'contentRating[]': ['safe', 'suggestive']
@@ -59,7 +59,7 @@ app.get('/api/manga/latest', async (req, res) => {
 
         const response = await axios.get(`${MANGADEX_API}/manga`, {
             params: {
-                limit: 15,
+                limit: 50,
                 'includes[]': 'cover_art',
                 'order[latestUploadedChapter]': 'desc',
                 'contentRating[]': ['safe', 'suggestive']
