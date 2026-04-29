@@ -198,16 +198,26 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
     }
 });
 
-// 6. IMAGES
+// 6. IMAGES (Pake Data Saver biar lebih cepet & aman dari blokir)
 app.get('/api/chapter/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`);
+        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`, {
+            timeout: 10000 // 10 detik timeout
+        });
         const { baseUrl, chapter } = response.data;
-        const images = chapter.data.map(img => `${baseUrl}/data/${chapter.hash}/${img}`);
+        
+        // Gunakan dataSaver untuk kecepatan dan kompatibilitas lebih baik
+        const images = chapter.dataSaver.map(img => `${baseUrl}/data-saver/${chapter.hash}/${img}`);
+        
+        if (images.length === 0) {
+            return res.status(404).json({ status: "error", message: "Chapter ini tidak punya gambar" });
+        }
+
         res.json({ status: "success", data: images });
     } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
+        console.error("Error fetch images:", error.message);
+        res.status(500).json({ status: "error", message: "Gagal ambil gambar dari server MangaDex" });
     }
 });
 
