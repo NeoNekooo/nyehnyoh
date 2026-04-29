@@ -179,11 +179,12 @@ app.get('/api/manga/:id/chapters', async (req, res) => {
 app.get('/api/chapter/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`, { timeout: 10000 });
+        const response = await axios.get(`${MANGADEX_API}/at-home/server/${id}`, { timeout: 15000 });
         const { baseUrl, chapter } = response.data;
-        // Pake Data Saver + Proxy Weserv buat nembus blokir ISP
-        const images = chapter.dataSaver.map(img => {
-            const originalUrl = `${baseUrl}/data-saver/${chapter.hash}/${img}`;
+        const imgList = (chapter.dataSaver && chapter.dataSaver.length > 0) ? chapter.dataSaver : chapter.data;
+        const subPath = (chapter.dataSaver && chapter.dataSaver.length > 0) ? 'data-saver' : 'data';
+        const images = imgList.map(img => {
+            const originalUrl = `${baseUrl}/${subPath}/${chapter.hash}/${img}`;
             return proxyImg(originalUrl);
         });
         res.json({ status: "success", data: images });
