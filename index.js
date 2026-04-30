@@ -76,7 +76,8 @@ app.get('/api/manga/popular', async (req, res) => {
                 id: m.id,
                 title: getTitle(m.attributes),
                 coverUrl: proxyImg(originalUrl),
-                status: m.attributes.status
+                status: m.attributes.status,
+                source: 'mangadex'
             };
         });
 
@@ -110,7 +111,8 @@ app.get('/api/manga/latest', async (req, res) => {
                 id: m.id,
                 title: getTitle(m.attributes),
                 coverUrl: proxyImg(originalUrl),
-                status: m.attributes.status
+                status: m.attributes.status,
+                source: 'mangadex'
             };
         });
 
@@ -139,7 +141,8 @@ app.get('/api/manga/search', async (req, res) => {
                 id: m.id,
                 title: getTitle(m.attributes),
                 coverUrl: proxyImg(originalUrl),
-                status: m.attributes.status
+                status: m.attributes.status,
+                source: 'mangadex'
             };
         });
         res.json({ status: "success", data: mangaList });
@@ -162,7 +165,8 @@ app.get('/api/manga/:id', async (req, res) => {
             description: m.attributes.description.en || Object.values(m.attributes.description)[0],
             coverUrl: proxyImg(originalUrl),
             status: m.attributes.status,
-            tags: m.attributes.tags.map(t => t.attributes.name.en)
+            tags: m.attributes.tags.map(t => t.attributes.name.en),
+            source: 'mangadex'
         };
         res.json({ status: "success", data: detail });
     } catch (error) {
