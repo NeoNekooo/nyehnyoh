@@ -1,7 +1,19 @@
 const express = require('express');
 const axios = require('axios');
+const https = require('https');
 const cheerio = require('cheerio');
 const cors = require('cors');
+
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false,
+});
+
+const axiosInstance = axios.create({
+    httpsAgent,
+    headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+});
 const NodeCache = require('node-cache');
 
 const app = express();
@@ -232,7 +244,7 @@ app.get('/api/chapter/:id', async (req, res) => {
 app.get('/api/komiku/popular', async (req, res) => {
     try {
         const url = `${KOMIKU_BASE}/manga/?orderby=meta_value_num`;
-        const response = await axios.get(url);
+        const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
@@ -260,7 +272,7 @@ app.get('/api/komiku/popular', async (req, res) => {
 app.get('/api/komiku/latest', async (req, res) => {
     try {
         const url = `${KOMIKU_BASE}/manga/?orderby=modified`;
-        const response = await axios.get(url);
+        const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
@@ -289,7 +301,7 @@ app.get('/api/komiku/search', async (req, res) => {
     const { q } = req.query;
     try {
         const url = `${KOMIKU_BASE}/cari/?post_type=manga&s=${encodeURIComponent(q)}`;
-        const response = await axios.get(url);
+        const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
@@ -317,7 +329,7 @@ app.get('/api/komiku/manga/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const url = `${KOMIKU_BASE}/manga/${id}/`;
-        const response = await axios.get(url);
+        const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
 
         const title = $('.dsk h1').text().trim();
@@ -357,7 +369,7 @@ app.get('/api/komiku/chapter/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const url = `${KOMIKU_BASE}/ch/${id}/`;
-        const response = await axios.get(url);
+        const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const images = [];
 
