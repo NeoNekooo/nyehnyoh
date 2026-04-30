@@ -30,7 +30,10 @@ const KOMIKU_API = 'https://api.komiku.org';
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
     if (!url) return null;
-    return `https://images.weserv.nl/?url=${encodeURIComponent(url)}&default=${encodeURIComponent(url)}`;
+    // Bersihkan parameter resize dari Komiku biar gak gepeng/jelek
+    let cleanUrl = url.split('?')[0];
+    // Pakai weserv buat nge-crop otomatis ke rasio portrait (3:4 atau 2:3) biar rapi di UI
+    return `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}&w=300&h=450&fit=cover&a=top&default=${encodeURIComponent(url)}`;
 };
 
 const GENRES = {
