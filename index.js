@@ -45,15 +45,11 @@ app.get('/api/manga/popular', async (req, res) => {
         const ratings = ['safe', 'suggestive'];
         if (nsfw === 'true') ratings.push('erotica', 'pornographic');
 
-        const params = {
-            limit: 50,
-            includes: ['cover_art'],
-            'order[followedCount]': 'desc',
-            contentRating: ratings
-        };
-        if (tag && GENRES[tag]) params.includedTags = [GENRES[tag]];
+        let url = `${MANGADEX_API}/manga?limit=50&includes[]=cover_art&order[followedCount]=desc`;
+        ratings.forEach(r => url += `&contentRating[]=${r}`);
+        if (tag && GENRES[tag]) url += `&includedTags[]=${GENRES[tag]}`;
 
-        const response = await axios.get(`${MANGADEX_API}/manga`, { params });
+        const response = await axios.get(url);
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
@@ -83,15 +79,11 @@ app.get('/api/manga/latest', async (req, res) => {
         const ratings = ['safe', 'suggestive'];
         if (nsfw === 'true') ratings.push('erotica', 'pornographic');
 
-        const params = {
-            limit: 50,
-            includes: ['cover_art'],
-            'order[latestUploadedChapter]': 'desc',
-            contentRating: ratings
-        };
-        if (tag && GENRES[tag]) params.includedTags = [GENRES[tag]];
+        let url = `${MANGADEX_API}/manga?limit=50&includes[]=cover_art&order[latestUploadedChapter]=desc`;
+        ratings.forEach(r => url += `&contentRating[]=${r}`);
+        if (tag && GENRES[tag]) url += `&includedTags[]=${GENRES[tag]}`;
 
-        const response = await axios.get(`${MANGADEX_API}/manga`, { params });
+        const response = await axios.get(url);
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
@@ -116,9 +108,11 @@ app.get('/api/manga/search', async (req, res) => {
     try {
         const ratings = ['safe', 'suggestive'];
         if (nsfw === 'true') ratings.push('erotica', 'pornographic');
-        const response = await axios.get(`${MANGADEX_API}/manga`, {
-            params: { title: q, limit: 20, includes: ['cover_art'], contentRating: ratings }
-        });
+        let url = `${MANGADEX_API}/manga?limit=20&includes[]=cover_art`;
+        if (q) url += `&title=${encodeURIComponent(q)}`;
+        ratings.forEach(r => url += `&contentRating[]=${r}`);
+        
+        const response = await axios.get(url);
         const mangaList = response.data.data.map(m => {
             const coverRel = m.relationships.find(r => r.type === 'cover_art');
             const fileName = coverRel ? coverRel.attributes?.fileName : null;
@@ -139,7 +133,7 @@ app.get('/api/manga/search', async (req, res) => {
 app.get('/api/manga/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/manga/${id}`, { params: { includes: ['cover_art'] } });
+        const response = await axios.get(`${MANGADEX_API}/manga/${id}?includes[]=cover_art`);
         const m = response.data.data;
         const coverRel = m.relationships.find(r => r.type === 'cover_art');
         const fileName = coverRel ? coverRel.attributes?.fileName : null;
@@ -161,9 +155,9 @@ app.get('/api/manga/:id', async (req, res) => {
 app.get('/api/manga/:id/chapters', async (req, res) => {
     const { id } = req.params;
     try {
-        const response = await axios.get(`${MANGADEX_API}/manga/${id}/feed`, {
-            params: { translatedLanguage: ['id', 'en'], 'order[chapter]': 'asc', limit: 500, contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'] }
-        });
+        let url = `${MANGADEX_API}/manga/${id}/feed?limit=500&order[chapter]=asc&translatedLanguage[]=id&translatedLanguage[]=en`;
+        ['safe', 'suggestive', 'erotica', 'pornographic'].forEach(r => url += `&contentRating[]=${r}`);
+        const response = await axios.get(url);
         const chapters = response.data.data.map(c => ({
             id: c.id,
             chapter: c.attributes.chapter,
