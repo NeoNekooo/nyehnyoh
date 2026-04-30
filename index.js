@@ -250,7 +250,6 @@ app.get('/api/komiku/popular', async (req, res) => {
         const mangaList = [];
 
         $('.bge').each((i, el) => {
-            if (i >= 20) return;
             const title = $(el).find('h3').text().trim();
             const link = $(el).find('a').attr('href');
             if (!link) return;
@@ -279,7 +278,6 @@ app.get('/api/komiku/latest', async (req, res) => {
         const mangaList = [];
 
         $('.bge').each((i, el) => {
-            if (i >= 20) return;
             const title = $(el).find('h3').text().trim();
             const link = $(el).find('a').attr('href');
             if (!link) return;
