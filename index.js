@@ -124,12 +124,14 @@ app.get('/api/manga/latest', async (req, res) => {
 });
 
 app.get('/api/manga/search', async (req, res) => {
-    const { q, nsfw } = req.query;
+    const { q, nsfw, tag, status } = req.query;
     try {
         const ratings = ['safe', 'suggestive'];
         if (nsfw === 'true') ratings.push('erotica', 'pornographic');
-        let url = `${MANGADEX_API}/manga?limit=20&includes[]=cover_art`;
+        let url = `${MANGADEX_API}/manga?limit=50&includes[]=cover_art`;
         if (q) url += `&title=${encodeURIComponent(q)}`;
+        if (tag && GENRES[tag]) url += `&includedTags[]=${GENRES[tag]}`;
+        if (status) url += `&status[]=${status}`;
         ratings.forEach(r => url += `&contentRating[]=${r}`);
         
         const response = await axios.get(url);
