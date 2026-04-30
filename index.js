@@ -152,6 +152,37 @@ app.get('/api/manga/:id', async (req, res) => {
     }
 });
 
+app.get('/api/manga/:id/related', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const mangaRes = await axios.get(`${MANGADEX_API}/manga/${id}`);
+        const tags = mangaRes.data.data.attributes.tags.slice(0, 3).map(t => t.id);
+        
+        if (tags.length === 0) return res.json({ status: "success", data: [] });
+
+        let url = `${MANGADEX_API}/manga?limit=10&includes[]=cover_art`;
+        tags.forEach(t => url += `&includedTags[]=${t}`);
+        ['safe', 'suggestive'].forEach(r => url += `&contentRating[]=${r}`);
+
+        const response = await axios.get(url);
+        const related = response.data.data
+            .filter(m => m.id !== id)
+            .map(m => {
+                const coverRel = m.relationships.find(r => r.type === 'cover_art');
+                const fileName = coverRel ? coverRel.attributes?.fileName : null;
+                const originalUrl = fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null;
+                return {
+                    id: m.id,
+                    title: getTitle(m.attributes),
+                    coverUrl: proxyImg(originalUrl)
+                };
+            });
+        res.json({ status: "success", data: related });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
 app.get('/api/manga/:id/chapters', async (req, res) => {
     const { id } = req.params;
     try {
