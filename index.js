@@ -341,8 +341,8 @@ app.get('/api/komiku/manga/:id', async (req, res) => {
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
 
-        const title = $('.dsk h1').text().trim();
-        const description = $('#sinopsis').text().trim();
+        const title = $('#Judul h1').text().replace('Komik', '').trim();
+        const description = $('#Sinopsis').text().trim() || $('.desc').text().trim();
         const coverUrl = $('.ims img').attr('src');
         
         const chapters = [];
