@@ -24,7 +24,8 @@ app.use(cors());
 app.use(express.json());
 
 const MANGADEX_API = 'https://api.mangadex.org';
-const KOMIKU_BASE = 'https://komiku.id';
+const KOMIKU_BASE = 'https://komiku.org';
+const KOMIKU_API = 'https://api.komiku.org';
 
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
@@ -243,7 +244,7 @@ app.get('/api/chapter/:id', async (req, res) => {
 
 app.get('/api/komiku/popular', async (req, res) => {
     try {
-        const url = `${KOMIKU_BASE}/manga/?orderby=meta_value_num`;
+        const url = `${KOMIKU_API}/manga/?orderby=meta_value_num`;
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
@@ -252,6 +253,7 @@ app.get('/api/komiku/popular', async (req, res) => {
             if (i >= 20) return;
             const title = $(el).find('h3').text().trim();
             const link = $(el).find('a').attr('href');
+            if (!link) return;
             const id = link.split('/manga/')[1].replace('/', '');
             const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
             
@@ -271,7 +273,7 @@ app.get('/api/komiku/popular', async (req, res) => {
 
 app.get('/api/komiku/latest', async (req, res) => {
     try {
-        const url = `${KOMIKU_BASE}/manga/?orderby=modified`;
+        const url = `${KOMIKU_API}/manga/?orderby=modified`;
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
@@ -280,6 +282,7 @@ app.get('/api/komiku/latest', async (req, res) => {
             if (i >= 20) return;
             const title = $(el).find('h3').text().trim();
             const link = $(el).find('a').attr('href');
+            if (!link) return;
             const id = link.split('/manga/')[1].replace('/', '');
             const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
             
@@ -300,7 +303,7 @@ app.get('/api/komiku/latest', async (req, res) => {
 app.get('/api/komiku/search', async (req, res) => {
     const { q } = req.query;
     try {
-        const url = `${KOMIKU_BASE}/cari/?post_type=manga&s=${encodeURIComponent(q)}`;
+        const url = `${KOMIKU_API}/manga/?s=${encodeURIComponent(q)}`;
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
@@ -308,6 +311,7 @@ app.get('/api/komiku/search', async (req, res) => {
         $('.bge').each((i, el) => {
             const title = $(el).find('h3').text().trim();
             const link = $(el).find('a').attr('href');
+            if (!link) return;
             const id = link.split('/manga/')[1].replace('/', '');
             const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
             
@@ -337,11 +341,12 @@ app.get('/api/komiku/manga/:id', async (req, res) => {
         const coverUrl = $('.ims img').attr('src');
         
         const chapters = [];
-        $('#daftar-chapter tr').each((i, el) => {
-            const chLink = $(el).find('.judulseries a').attr('href');
+        $('.judulseries a').each((i, el) => {
+            const chLink = $(el).attr('href');
             if (chLink) {
-                const chId = chLink.split('/ch/')[1].replace('/', '');
-                const chNum = $(el).find('.judulseries a').text().replace('Chapter', '').trim();
+                // Link bisa berupa /chapter-slug/ atau https://komiku.org/chapter-slug/
+                const chId = chLink.replace(KOMIKU_BASE, '').replace(/\//g, '');
+                const chNum = $(el).find('b').text().replace('Chapter', '').trim();
                 chapters.push({
                     id: chId,
                     chapter: chNum,
@@ -356,7 +361,7 @@ app.get('/api/komiku/manga/:id', async (req, res) => {
             title: title,
             description: description,
             coverUrl: proxyImg(coverUrl),
-            chapters: chapters.reverse(), // Urutkan dari chapter awal
+            chapters: chapters, // Urutan asli terbaru di atas
             source: 'komiku'
         };
         res.json({ status: "success", data: detail });
@@ -368,7 +373,7 @@ app.get('/api/komiku/manga/:id', async (req, res) => {
 app.get('/api/komiku/chapter/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const url = `${KOMIKU_BASE}/ch/${id}/`;
+        const url = `${KOMIKU_BASE}/${id}/`;
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const images = [];
