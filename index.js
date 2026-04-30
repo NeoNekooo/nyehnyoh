@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const cheerio = require('cheerio');
 const cors = require('cors');
 const NodeCache = require('node-cache');
 
@@ -11,6 +12,7 @@ app.use(cors());
 app.use(express.json());
 
 const MANGADEX_API = 'https://api.mangadex.org';
+const KOMIKU_BASE = 'https://komiku.id';
 
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
@@ -219,6 +221,151 @@ app.get('/api/chapter/:id', async (req, res) => {
             const originalUrl = `${baseUrl}/${subPath}/${chapter.hash}/${img}`;
             return proxyImg(originalUrl);
         });
+        res.json({ status: "success", data: images });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// === KOMIKU SCRAPER (INDONESIA) ===
+
+app.get('/api/komiku/popular', async (req, res) => {
+    try {
+        const url = `${KOMIKU_BASE}/manga/?orderby=meta_value_num`;
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const mangaList = [];
+
+        $('.bge').each((i, el) => {
+            if (i >= 20) return;
+            const title = $(el).find('h3').text().trim();
+            const link = $(el).find('a').attr('href');
+            const id = link.split('/manga/')[1].replace('/', '');
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+            
+            mangaList.push({
+                id: id,
+                title: title,
+                coverUrl: proxyImg(coverUrl),
+                source: 'komiku'
+            });
+        });
+
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/komiku/latest', async (req, res) => {
+    try {
+        const url = `${KOMIKU_BASE}/manga/?orderby=modified`;
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const mangaList = [];
+
+        $('.bge').each((i, el) => {
+            if (i >= 20) return;
+            const title = $(el).find('h3').text().trim();
+            const link = $(el).find('a').attr('href');
+            const id = link.split('/manga/')[1].replace('/', '');
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+            
+            mangaList.push({
+                id: id,
+                title: title,
+                coverUrl: proxyImg(coverUrl),
+                source: 'komiku'
+            });
+        });
+
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/komiku/search', async (req, res) => {
+    const { q } = req.query;
+    try {
+        const url = `${KOMIKU_BASE}/cari/?post_type=manga&s=${encodeURIComponent(q)}`;
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const mangaList = [];
+
+        $('.bge').each((i, el) => {
+            const title = $(el).find('h3').text().trim();
+            const link = $(el).find('a').attr('href');
+            const id = link.split('/manga/')[1].replace('/', '');
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+            
+            mangaList.push({
+                id: id,
+                title: title,
+                coverUrl: proxyImg(coverUrl),
+                source: 'komiku'
+            });
+        });
+
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/komiku/manga/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const url = `${KOMIKU_BASE}/manga/${id}/`;
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+
+        const title = $('.dsk h1').text().trim();
+        const description = $('#sinopsis').text().trim();
+        const coverUrl = $('.ims img').attr('src');
+        
+        const chapters = [];
+        $('#daftar-chapter tr').each((i, el) => {
+            const chLink = $(el).find('.judulseries a').attr('href');
+            if (chLink) {
+                const chId = chLink.split('/ch/')[1].replace('/', '');
+                const chNum = $(el).find('.judulseries a').text().replace('Chapter', '').trim();
+                chapters.push({
+                    id: chId,
+                    chapter: chNum,
+                    title: `Chapter ${chNum}`,
+                    language: 'id'
+                });
+            }
+        });
+
+        const detail = {
+            id: id,
+            title: title,
+            description: description,
+            coverUrl: proxyImg(coverUrl),
+            chapters: chapters.reverse(), // Urutkan dari chapter awal
+            source: 'komiku'
+        };
+        res.json({ status: "success", data: detail });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/komiku/chapter/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const url = `${KOMIKU_BASE}/ch/${id}/`;
+        const response = await axios.get(url);
+        const $ = cheerio.load(response.data);
+        const images = [];
+
+        $('#Baca_Komik img').each((i, el) => {
+            const imgUrl = $(el).attr('src');
+            if (imgUrl) images.push(proxyImg(imgUrl.trim()));
+        });
+
         res.json({ status: "success", data: images });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
