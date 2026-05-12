@@ -145,6 +145,10 @@ app.get('/api/frames', (req, res) => {
     res.json({ status: "success", data: getData('frames') });
 });
 
+app.get('/api/admin/users', (req, res) => {
+    res.json({ status: "success", data: getData('users') });
+});
+
 app.post('/api/user/update-frame', (req, res) => {
     const { userId, frameId } = req.body;
     const users = getData('users');
