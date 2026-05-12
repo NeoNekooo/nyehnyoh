@@ -27,20 +27,32 @@ const DB_PATH = process.env.VERCEL ? '/tmp/db' : path.join(__dirname, 'db');
 try {
     if (!fs.existsSync(DB_PATH)) fs.mkdirSync(DB_PATH, { recursive: true });
 } catch (e) {
-    console.log("Gagal buat folder DB, pake mode Memory.");
+    console.log("Gagal buat folder DB.");
 }
+
+// In-Memory Storage buat Vercel (Biar gak gampang ilang pas session)
+let memoryDB = {
+    users: [],
+    frames: []
+};
 
 const getData = (file) => {
     try {
+        // Cek memory dulu
+        if (memoryDB[file] && memoryDB[file].length > 0) return memoryDB[file];
+        
         const filePath = path.join(DB_PATH, `${file}.json`);
         if (!fs.existsSync(filePath)) return [];
-        return JSON.parse(fs.readFileSync(filePath));
+        const data = JSON.parse(fs.readFileSync(filePath));
+        memoryDB[file] = data; // Sync ke memory
+        return data;
     } catch (e) {
-        return [];
+        return memoryDB[file] || [];
     }
 };
 
 const saveData = (file, data) => {
+    memoryDB[file] = data; // Simpan ke memory dulu
     try {
         const filePath = path.join(DB_PATH, `${file}.json`);
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
