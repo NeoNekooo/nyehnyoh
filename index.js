@@ -98,8 +98,13 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
+        console.log(`[LOGIN ATTEMPT] User: ${username}`);
         const user = await User.findOne({ username, password }).populate('frame');
-        if (!user) return res.status(401).json({ status: "error", message: "Login gagal" });
+        if (!user) {
+            console.log(`[LOGIN FAILED] User: ${username}`);
+            return res.status(401).json({ status: "error", message: "Login gagal" });
+        }
+        console.log(`[LOGIN SUCCESS] User: ${username}`);
         res.json({ status: "success", data: user });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
