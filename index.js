@@ -19,47 +19,28 @@ const NodeCache = require('node-cache');
 const app = express();
 const cache = new NodeCache({ stdTTL: 600 });
 const PORT = process.env.PORT || 3000;
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 
-// Database Simpel (JSON) - Disesuaikan buat Vercel (Read-Only filesystem)
-const DB_PATH = process.env.VERCEL ? '/tmp/db' : path.join(__dirname, 'db');
-try {
-    if (!fs.existsSync(DB_PATH)) fs.mkdirSync(DB_PATH, { recursive: true });
-} catch (e) {
-    console.log("Gagal buat folder DB.");
-}
+// MongoDB Connection
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://manganya_db:Tl2NcAufyJrBuU6T@cluster0.x7iu4xb.mongodb.net/manganyan?retryWrites=true&w=majority';
+mongoose.connect(MONGO_URI)
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('MongoDB connection error:', err));
 
-// In-Memory Storage buat Vercel (Biar gak gampang ilang pas session)
-let memoryDB = {
-    users: [],
-    frames: []
-};
+// Schemas
+const FrameSchema = new mongoose.Schema({
+    name: String,
+    imageUrl: String
+});
+const Frame = mongoose.model('Frame', FrameSchema);
 
-const getData = (file) => {
-    try {
-        // Cek memory dulu
-        if (memoryDB[file] && memoryDB[file].length > 0) return memoryDB[file];
-        
-        const filePath = path.join(DB_PATH, `${file}.json`);
-        if (!fs.existsSync(filePath)) return [];
-        const data = JSON.parse(fs.readFileSync(filePath));
-        memoryDB[file] = data; // Sync ke memory
-        return data;
-    } catch (e) {
-        return memoryDB[file] || [];
-    }
-};
-
-const saveData = (file, data) => {
-    memoryDB[file] = data; // Simpan ke memory dulu
-    try {
-        const filePath = path.join(DB_PATH, `${file}.json`);
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.log("Gagal simpan data ke file, data cuma di memory.");
-    }
-};
+const UserSchema = new mongoose.Schema({
+    username: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    avatar: String,
+    frame: { type: mongoose.Schema.Types.ObjectId, ref: 'Frame', default: null }
+});
+const User = mongoose.model('User', UserSchema);
 
 app.use(cors());
 app.use(express.json());
@@ -94,70 +75,85 @@ const getTitle = (attributes) => {
     return attributes.title.en || attributes.title.ja || attributes.title['ja-ro'] || Object.values(attributes.title)[0];
 };
 
-// === AUTH & PROFILE SYSTEM ===
+// === AUTH & PROFILE SYSTEM (MONGODB VERSION) ===
 
-app.post('/api/auth/register', (req, res) => {
-    const { username, password } = req.body;
-    const users = getData('users');
-    if (users.find(u => u.username === username)) return res.status(400).json({ status: "error", message: "Username sudah ada" });
-    
-    const newUser = { 
-        id: Date.now().toString(), 
-        username, 
-        password, 
-        avatar: `https://ui-avatars.com/api/?name=${username}&background=random`,
-        frameId: null 
-    };
-    users.push(newUser);
-    saveData('users', users);
-    res.json({ status: "success", data: newUser });
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const existing = await User.findOne({ username });
+        if (existing) return res.status(400).json({ status: "error", message: "Username sudah ada" });
+        
+        const newUser = new User({ 
+            username, 
+            password, 
+            avatar: `https://ui-avatars.com/api/?name=${username}&background=random`
+        });
+        await newUser.save();
+        res.json({ status: "success", data: newUser });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body;
-    const users = getData('users');
-    const user = users.find(u => u.username === username && u.password === password);
-    if (!user) return res.status(401).json({ status: "error", message: "Login gagal" });
-    res.json({ status: "success", data: user });
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        const user = await User.findOne({ username, password }).populate('frame');
+        if (!user) return res.status(401).json({ status: "error", message: "Login gagal" });
+        res.json({ status: "success", data: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.get('/api/user/profile/:id', (req, res) => {
-    const { id } = req.params;
-    const users = getData('users');
-    const user = users.find(u => u.id === id);
-    if (!user) return res.status(404).json({ status: "error", message: "User tidak ditemukan" });
-    
-    const frames = getData('frames');
-    const userFrame = frames.find(f => f.id === user.frameId);
-    res.json({ status: "success", data: { ...user, frame: userFrame } });
+app.get('/api/user/profile/:id', async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id).populate('frame');
+        if (!user) return res.status(404).json({ status: "error", message: "User tidak ditemukan" });
+        res.json({ status: "success", data: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.post('/api/admin/frames', (req, res) => {
-    const { name, imageUrl } = req.body;
-    const frames = getData('frames');
-    const newFrame = { id: Date.now().toString(), name, imageUrl };
-    frames.push(newFrame);
-    saveData('frames', frames);
-    res.json({ status: "success", data: newFrame });
+app.post('/api/admin/frames', async (req, res) => {
+    try {
+        const { name, imageUrl } = req.body;
+        const newFrame = new Frame({ name, imageUrl });
+        await newFrame.save();
+        res.json({ status: "success", data: newFrame });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.get('/api/frames', (req, res) => {
-    res.json({ status: "success", data: getData('frames') });
+app.get('/api/frames', async (req, res) => {
+    try {
+        const frames = await Frame.find();
+        res.json({ status: "success", data: frames });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.get('/api/admin/users', (req, res) => {
-    res.json({ status: "success", data: getData('users') });
+app.get('/api/admin/users', async (req, res) => {
+    try {
+        const users = await User.find().populate('frame');
+        res.json({ status: "success", data: users });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
-app.post('/api/user/update-frame', (req, res) => {
-    const { userId, frameId } = req.body;
-    const users = getData('users');
-    const userIdx = users.findIndex(u => u.id === userId);
-    if (userIdx === -1) return res.status(404).json({ status: "error", message: "User not found" });
-    
-    users[userIdx].frameId = frameId;
-    saveData('users', users);
-    res.json({ status: "success", data: users[userIdx] });
+app.post('/api/user/update-frame', async (req, res) => {
+    try {
+        const { userId, frameId } = req.body;
+        const user = await User.findByIdAndUpdate(userId, { frame: frameId }, { new: true }).populate('frame');
+        if (!user) return res.status(404).json({ status: "error", message: "User not found" });
+        res.json({ status: "success", data: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
 });
 
 app.get('/api/manga/popular', async (req, res) => {
