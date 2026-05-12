@@ -19,6 +19,23 @@ const NodeCache = require('node-cache');
 const app = express();
 const cache = new NodeCache({ stdTTL: 600 });
 const PORT = process.env.PORT || 3000;
+const fs = require('fs');
+const path = require('path');
+
+// Database Simpel (JSON)
+const DB_PATH = path.join(__dirname, 'db');
+if (!fs.existsSync(DB_PATH)) fs.mkdirSync(DB_PATH);
+
+const getData = (file) => {
+    const filePath = path.join(DB_PATH, `${file}.json`);
+    if (!fs.existsSync(filePath)) return [];
+    return JSON.parse(fs.readFileSync(filePath));
+};
+
+const saveData = (file, data) => {
+    const filePath = path.join(DB_PATH, `${file}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+};
 
 app.use(cors());
 app.use(express.json());
@@ -52,6 +69,68 @@ const GENRES = {
 const getTitle = (attributes) => {
     return attributes.title.en || attributes.title.ja || attributes.title['ja-ro'] || Object.values(attributes.title)[0];
 };
+
+// === AUTH & PROFILE SYSTEM ===
+
+app.post('/api/auth/register', (req, res) => {
+    const { username, password } = req.body;
+    const users = getData('users');
+    if (users.find(u => u.username === username)) return res.status(400).json({ status: "error", message: "Username sudah ada" });
+    
+    const newUser = { 
+        id: Date.now().toString(), 
+        username, 
+        password, 
+        avatar: `https://ui-avatars.com/api/?name=${username}&background=random`,
+        frameId: null 
+    };
+    users.push(newUser);
+    saveData('users', users);
+    res.json({ status: "success", data: newUser });
+});
+
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    const users = getData('users');
+    const user = users.find(u => u.username === username && u.password === password);
+    if (!user) return res.status(401).json({ status: "error", message: "Login gagal" });
+    res.json({ status: "success", data: user });
+});
+
+app.get('/api/user/profile/:id', (req, res) => {
+    const { id } = req.params;
+    const users = getData('users');
+    const user = users.find(u => u.id === id);
+    if (!user) return res.status(404).json({ status: "error", message: "User tidak ditemukan" });
+    
+    const frames = getData('frames');
+    const userFrame = frames.find(f => f.id === user.frameId);
+    res.json({ status: "success", data: { ...user, frame: userFrame } });
+});
+
+app.post('/api/admin/frames', (req, res) => {
+    const { name, imageUrl } = req.body;
+    const frames = getData('frames');
+    const newFrame = { id: Date.now().toString(), name, imageUrl };
+    frames.push(newFrame);
+    saveData('frames', frames);
+    res.json({ status: "success", data: newFrame });
+});
+
+app.get('/api/frames', (req, res) => {
+    res.json({ status: "success", data: getData('frames') });
+});
+
+app.post('/api/user/update-frame', (req, res) => {
+    const { userId, frameId } = req.body;
+    const users = getData('users');
+    const userIdx = users.findIndex(u => u.id === userId);
+    if (userIdx === -1) return res.status(404).json({ status: "error", message: "User not found" });
+    
+    users[userIdx].frameId = frameId;
+    saveData('users', users);
+    res.json({ status: "success", data: users[userIdx] });
+});
 
 app.get('/api/manga/popular', async (req, res) => {
     const { nsfw, tag } = req.query;
