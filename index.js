@@ -22,19 +22,31 @@ const PORT = process.env.PORT || 3000;
 const fs = require('fs');
 const path = require('path');
 
-// Database Simpel (JSON)
-const DB_PATH = path.join(__dirname, 'db');
-if (!fs.existsSync(DB_PATH)) fs.mkdirSync(DB_PATH);
+// Database Simpel (JSON) - Disesuaikan buat Vercel (Read-Only filesystem)
+const DB_PATH = process.env.VERCEL ? '/tmp/db' : path.join(__dirname, 'db');
+try {
+    if (!fs.existsSync(DB_PATH)) fs.mkdirSync(DB_PATH, { recursive: true });
+} catch (e) {
+    console.log("Gagal buat folder DB, pake mode Memory.");
+}
 
 const getData = (file) => {
-    const filePath = path.join(DB_PATH, `${file}.json`);
-    if (!fs.existsSync(filePath)) return [];
-    return JSON.parse(fs.readFileSync(filePath));
+    try {
+        const filePath = path.join(DB_PATH, `${file}.json`);
+        if (!fs.existsSync(filePath)) return [];
+        return JSON.parse(fs.readFileSync(filePath));
+    } catch (e) {
+        return [];
+    }
 };
 
 const saveData = (file, data) => {
-    const filePath = path.join(DB_PATH, `${file}.json`);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    try {
+        const filePath = path.join(DB_PATH, `${file}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.log("Gagal simpan data ke file, data cuma di memory.");
+    }
 };
 
 app.use(cors());
