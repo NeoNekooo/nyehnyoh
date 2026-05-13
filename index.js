@@ -38,9 +38,30 @@ const UserSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     avatar: String,
-    frame: { type: mongoose.Schema.Types.ObjectId, ref: 'Frame', default: null }
+    coins: { type: Number, default: 0 },
+    frame: { type: mongoose.Schema.Types.ObjectId, ref: 'Frame', default: null },
+    unlockedFrames: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Frame' }]
 });
 const User = mongoose.model('User', UserSchema);
+
+const CommentSchema = new mongoose.Schema({
+    mangaId: String,
+    chapterId: String,
+    username: String,
+    avatar: String,
+    text: String,
+    timestamp: { type: Date, default: Date.now }
+});
+const Comment = mongoose.model('Comment', CommentSchema);
+
+const NewsSchema = new mongoose.Schema({
+    title: String,
+    description: String,
+    imageUrl: String,
+    url: String,
+    date: { type: Date, default: Date.now }
+});
+const News = mongoose.model('News', NewsSchema);
 
 app.use(cors());
 app.use(express.json());
@@ -156,6 +177,75 @@ app.post('/api/user/update-frame', async (req, res) => {
         const user = await User.findByIdAndUpdate(userId, { frame: frameId }, { new: true }).populate('frame');
         if (!user) return res.status(404).json({ status: "error", message: "User not found" });
         res.json({ status: "success", data: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+app.post('/api/user/add-coins', async (req, res) => {
+    try {
+        const { userId, amount } = req.body;
+        const user = await User.findByIdAndUpdate(userId, { $inc: { coins: amount } }, { new: true });
+        res.json({ status: "success", data: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.post('/api/gacha/pull', async (req, res) => {
+    try {
+        const { userId } = req.body;
+        const user = await User.findById(userId);
+        if (user.coins < 50) return res.status(400).json({ status: "error", message: "Koin tidak cukup (Butuh 50 koin)" });
+
+        const frames = await Frame.find();
+        if (frames.length === 0) return res.status(400).json({ status: "error", message: "Belum ada frame di sistem" });
+
+        const randomFrame = frames[Math.floor(Math.random() * frames.length)];
+        
+        user.coins -= 50;
+        if (!user.unlockedFrames.includes(randomFrame._id)) {
+            user.unlockedFrames.push(randomFrame._id);
+        }
+        await user.save();
+        
+        res.json({ status: "success", data: randomFrame, user: user });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/comments/:chapterId', async (req, res) => {
+    try {
+        const comments = await Comment.find({ chapterId: req.params.chapterId }).sort({ timestamp: -1 }).limit(50);
+        res.json({ status: "success", data: comments });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.post('/api/comments', async (req, res) => {
+    try {
+        const { mangaId, chapterId, username, avatar, text } = req.body;
+        const newComment = new Comment({ mangaId, chapterId, username, avatar, text });
+        await newComment.save();
+        res.json({ status: "success", data: newComment });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+app.get('/api/news', async (req, res) => {
+    try {
+        // Simulasi news scraper / ambil dari DB
+        const news = await News.find().sort({ date: -1 }).limit(20);
+        // Kalau kosong, kasih berita dummy dulu biar gak sepi
+        if (news.length === 0) {
+            return res.json({ status: "success", data: [
+                { title: "Manga Chainsaw Man Chapter Terbaru Rilis!", description: "Denji kembali beraksi dengan kekuatan baru yang mengerikan.", imageUrl: "https://i.ibb.co/L6mN2xk/news1.jpg", date: new Date() },
+                { title: "One Piece Libur Minggu Depan", description: "Oda Sensei butuh istirahat sejenak untuk riset final saga.", imageUrl: "https://i.ibb.co/L6mN2xk/news2.jpg", date: new Date() }
+            ]});
+        }
+        res.json({ status: "success", data: news });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
