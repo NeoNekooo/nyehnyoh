@@ -20,7 +20,11 @@ const axiosInstance = axios.create({
 const NodeCache = require('node-cache');
 
 const app = express();
-const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 }); // Cache 1 jam bre biar ngebut
+const http = require('http').createServer(app);
+const io = require('socket.io')(http, {
+    cors: { origin: "*" }
+});
+const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 const PORT = process.env.PORT || 3000;
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://manganya_db:Tl2NcAufyJrBuU6T@cluster0.x7iu4xb.mongodb.net/manganyan?retryWrites=true&w=majority';
@@ -629,7 +633,51 @@ app.get('/api/komiku/chapter/:id', async (req, res) => {
     }
 });
 
-// --- AI & ANALYTICS ---
+// --- REALTIME & EXTERNAL SYNC ---
+
+// MyAnimeList Importer (Pake Jikan API)
+app.get('/api/mal/import/:username', async (req, res) => {
+    try {
+        const { username } = req.params;
+        const response = await axios.get(`https://api.jikan.moe/v4/users/${username}/mangalist`);
+        
+        const mangaList = response.data.data.map(item => ({
+            title: item.manga.title,
+            malId: item.manga.mal_id,
+            imageUrl: item.manga.images.jpg.image_url,
+            status: item.reading_status
+        }));
+
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: "Gagal impor dari MAL. Cek username kamu bre!" });
+    }
+});
+
+// Socket.io Connection Logic
+io.on('connection', (socket) => {
+    console.log('User connected to Realtime Hub: ' + socket.id);
+    
+    socket.on('subscribe_updates', (mangaIds) => {
+        mangaIds.forEach(id => socket.join(`manga_${id}`));
+        console.log(`User subscribed to updates for ${mangaIds.length} manga`);
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected');
+    });
+});
+
+// Helper buat broadcast notif (bisa dipanggil dari rute mana aja)
+const broadcastNotification = (type, data) => {
+    io.emit('notification', { type, data, timestamp: new Date() });
+};
+
+// Override popular manga buat simulasi notif update (Hanya buat testing)
+app.get('/api/manga/broadcast-test', (req, res) => {
+    broadcastNotification('UPDATE', { title: 'Solo Leveling', chapter: '179' });
+    res.send('Notif terkirim ke semua user!');
+});
 
 // Simpan Riwayat ke Cloud
 app.post('/api/history', async (req, res) => {
@@ -706,7 +754,7 @@ app.get('/api/admin/seed', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+http.listen(PORT, () => {
+    console.log(`Realtime Server running on port ${PORT}`);
 });
 module.exports = app;
