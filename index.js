@@ -20,7 +20,7 @@ const axiosInstance = axios.create({
 const NodeCache = require('node-cache');
 
 const app = express();
-const cache = new NodeCache({ stdTTL: 600 });
+const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 }); // Cache 1 jam bre biar ngebut
 const PORT = process.env.PORT || 3000;
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://manganya_db:Tl2NcAufyJrBuU6T@cluster0.x7iu4xb.mongodb.net/manganyan?retryWrites=true&w=majority';
@@ -236,15 +236,18 @@ app.post('/api/comments', async (req, res) => {
 });
 
 app.get('/api/news', async (req, res) => {
+    const cacheKey = 'manga_news_live';
+    const cachedData = cache.get(cacheKey);
+    if (cachedData) return res.json({ status: "success", data: cachedData });
+
     try {
-        // Ambil berita LIVE dengan timeout 3 detik biar gak nunggu lama
         const feed = await Promise.race([
             parser.parseURL('https://www.animenewsnetwork.com/news/rss.xml'),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
         ]);
         
         const liveNews = feed.items.map(item => {
-            let imageUrl = "https://i.ibb.co/L6mN2xk/news-placeholder.jpg";
+            let imageUrl = "https://img.icons8.com/clouds/200/news.png";
             const imgMatch = (item.content || item.description || "").match(/src="([^"]+)"/);
             if (imgMatch) imageUrl = imgMatch[1];
 
@@ -257,6 +260,7 @@ app.get('/api/news', async (req, res) => {
             };
         });
 
+        cache.set(cacheKey, liveNews.slice(0, 20));
         res.json({ status: "success", data: liveNews.slice(0, 20) });
     } catch (error) {
         console.error('Scraper Error:', error.message);
