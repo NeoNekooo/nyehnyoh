@@ -22,11 +22,9 @@ const NodeCache = require('node-cache');
 const app = express();
 const cache = new NodeCache({ stdTTL: 600 });
 const PORT = process.env.PORT || 3000;
-const mongoose = require('mongoose');
-
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://manganya_db:Tl2NcAufyJrBuU6T@cluster0.x7iu4xb.mongodb.net/manganyan?retryWrites=true&w=majority';
-mongoose.connect(MONGO_URI)
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('MongoDB connection error:', err));
 
@@ -239,13 +237,15 @@ app.post('/api/comments', async (req, res) => {
 
 app.get('/api/news', async (req, res) => {
     try {
-        // Ambil berita LIVE dari RSS Feed AnimeNewsNetwork
-        const feed = await parser.parseURL('https://www.animenewsnetwork.com/news/rss.xml');
+        // Ambil berita LIVE dengan timeout 3 detik biar gak nunggu lama
+        const feed = await Promise.race([
+            parser.parseURL('https://www.animenewsnetwork.com/news/rss.xml'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+        ]);
         
         const liveNews = feed.items.map(item => {
-            // Ekstrak gambar dari konten jika ada (ANN biasanya naruh di description/content)
             let imageUrl = "https://i.ibb.co/L6mN2xk/news-placeholder.jpg";
-            const imgMatch = item.content ? item.content.match(/src="([^"]+)"/) : null;
+            const imgMatch = (item.content || item.description || "").match(/src="([^"]+)"/);
             if (imgMatch) imageUrl = imgMatch[1];
 
             return {
@@ -259,10 +259,14 @@ app.get('/api/news', async (req, res) => {
 
         res.json({ status: "success", data: liveNews.slice(0, 20) });
     } catch (error) {
-        console.error('Scraper Error:', error);
-        // Fallback kalau internet mati
-        const news = await News.find().sort({ date: -1 }).limit(20);
-        res.json({ status: "success", data: news });
+        console.error('Scraper Error:', error.message);
+        // Kalau macet, ambil dari database sebagai cadangan
+        try {
+            const news = await News.find().sort({ date: -1 }).limit(20);
+            res.json({ status: "success", data: news });
+        } catch (dbError) {
+            res.json({ status: "success", data: [] });
+        }
     }
 });
 
