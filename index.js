@@ -617,5 +617,25 @@ app.get('/api/komiku/chapter/:id', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
+// Rute Rahasia Seeder Sultan (Biar nggak usah pusing Whitelist IP Local)
+app.get('/api/admin/seed', async (req, res) => {
+    try {
+        await Frame.deleteMany({});
+        const frames = [
+            { name: "Golden Elite (Legendary)", imageUrl: "https://img.icons8.com/clouds/200/gold-bars.png" },
+            { name: "Cyber Neon (Rare)", imageUrl: "https://img.icons8.com/clouds/200/light-switch.png" },
+            { name: "Sakura Blossom (Rare)", imageUrl: "https://img.icons8.com/clouds/200/cherry-blossoms.png" },
+            { name: "Void Purple (Epic)", imageUrl: "https://img.icons8.com/clouds/200/vortex.png" },
+            { name: "Flame Spirit (Epic)", imageUrl: "https://img.icons8.com/clouds/200/fire-element.png" }
+        ];
+        await Frame.insertMany(frames);
+        res.send("<h1>SULTAN SEEDING SUKSES BRE!</h1><p>Koleksi Frame Elit sudah masuk ke database. Sekarang silakan cek aplikasinya.</p>");
+    } catch (error) {
+        res.status(500).send("Gagal seeding: " + error.message);
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
 module.exports = app;
