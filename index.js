@@ -64,6 +64,18 @@ const NewsSchema = new mongoose.Schema({
 });
 const News = mongoose.model('News', NewsSchema);
 
+const HistorySchema = new mongoose.Schema({
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    mangaId: String,
+    mangaTitle: String,
+    mangaCover: String,
+    chapterId: String,
+    chapterTitle: String,
+    genres: [String],
+    timestamp: { type: Date, default: Date.now }
+});
+const History = mongoose.model('History', HistorySchema);
+
 app.use(cors());
 app.use(express.json());
 
@@ -617,7 +629,66 @@ app.get('/api/komiku/chapter/:id', async (req, res) => {
     }
 });
 
-// Rute Rahasia Seeder Sultan (Biar nggak usah pusing Whitelist IP Local)
+// --- AI & ANALYTICS ---
+
+// Simpan Riwayat ke Cloud
+app.post('/api/history', async (req, res) => {
+    try {
+        const { userId, mangaId, mangaTitle, mangaCover, chapterId, chapterTitle, genres } = req.body;
+        const history = new History({ userId, mangaId, mangaTitle, mangaCover, chapterId, chapterTitle, genres });
+        await history.save();
+        res.json({ status: "success", message: "History saved to cloud" });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// Ambil Statistik User
+app.get('/api/user/stats/:userId', async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const history = await History.find({ userId });
+        
+        // Hitung total chapter
+        const totalChapters = history.length;
+        
+        // Hitung genre favorit
+        const genreMap = {};
+        history.forEach(h => {
+            h.genres.forEach(g => {
+                genreMap[g] = (genreMap[g] || 0) + 1;
+            });
+        });
+        
+        const topGenres = Object.entries(genreMap)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(e => e[0]);
+
+        res.json({ 
+            status: "success", 
+            data: {
+                totalChapters,
+                topGenres,
+                readingDays: new Set(history.map(h => h.timestamp.toISOString().split('T')[0])).size
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// Mock AI Recommendation
+app.post('/api/ai/recommend', async (req, res) => {
+    const { title, genres } = req.body;
+    // Di sini nantinya bisa panggil Gemini API
+    // Untuk sekarang kita kasih simulasi logic AI
+    const recommendations = [
+        { title: "Manga Serupa 1", reason: "AI mendeteksi kesamaan tema Action dan Artstyle." },
+        { title: "Manga Serupa 2", reason: "Berdasarkan genre " + (genres[0] || "Manga") + " yang kamu suka." }
+    ];
+    res.json({ status: "success", data: recommendations });
+});
 app.get('/api/admin/seed', async (req, res) => {
     try {
         await Frame.deleteMany({});
