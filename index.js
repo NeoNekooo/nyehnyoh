@@ -3,6 +3,9 @@ const axios = require('axios');
 const https = require('https');
 const cheerio = require('cheerio');
 const cors = require('cors');
+const mongoose = require('mongoose');
+const Parser = require('rss-parser');
+const parser = new Parser();
 
 const httpsAgent = new https.Agent({
     rejectUnauthorized: false,
@@ -236,18 +239,30 @@ app.post('/api/comments', async (req, res) => {
 
 app.get('/api/news', async (req, res) => {
     try {
-        // Simulasi news scraper / ambil dari DB
-        const news = await News.find().sort({ date: -1 }).limit(20);
-        // Kalau kosong, kasih berita dummy dulu biar gak sepi
-        if (news.length === 0) {
-            return res.json({ status: "success", data: [
-                { title: "Manga Chainsaw Man Chapter Terbaru Rilis!", description: "Denji kembali beraksi dengan kekuatan baru yang mengerikan.", imageUrl: "https://i.ibb.co/L6mN2xk/news1.jpg", date: new Date() },
-                { title: "One Piece Libur Minggu Depan", description: "Oda Sensei butuh istirahat sejenak untuk riset final saga.", imageUrl: "https://i.ibb.co/L6mN2xk/news2.jpg", date: new Date() }
-            ]});
-        }
-        res.json({ status: "success", data: news });
+        // Ambil berita LIVE dari RSS Feed AnimeNewsNetwork
+        const feed = await parser.parseURL('https://www.animenewsnetwork.com/news/rss.xml');
+        
+        const liveNews = feed.items.map(item => {
+            // Ekstrak gambar dari konten jika ada (ANN biasanya naruh di description/content)
+            let imageUrl = "https://i.ibb.co/L6mN2xk/news-placeholder.jpg";
+            const imgMatch = item.content ? item.content.match(/src="([^"]+)"/) : null;
+            if (imgMatch) imageUrl = imgMatch[1];
+
+            return {
+                title: item.title,
+                description: item.contentSnippet || item.description,
+                imageUrl: imageUrl,
+                url: item.link,
+                date: item.pubDate
+            };
+        });
+
+        res.json({ status: "success", data: liveNews.slice(0, 20) });
     } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
+        console.error('Scraper Error:', error);
+        // Fallback kalau internet mati
+        const news = await News.find().sort({ date: -1 }).limit(20);
+        res.json({ status: "success", data: news });
     }
 });
 
