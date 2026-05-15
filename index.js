@@ -94,8 +94,8 @@ const KOMIKCAST_BASE = 'https://komikcast.bz';
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url, useInternal = false) => {
     if (!url) return null;
-    if (useInternal || url.includes('nhentai.net')) {
-        // Pake proxy internal kita sendiri buat nembus blokir hotlink nhentai
+    if (useInternal || url.includes('nhentai.net') || url.includes('e-hentai.org')) {
+        // Pake proxy internal kita sendiri buat nembus blokir hotlink
         return `https://nyehnyoh.vercel.app/api/proxy-image?url=${encodeURIComponent(url)}`;
     }
     let cleanUrl = url.split('?')[0];
@@ -986,14 +986,14 @@ const handleSecretSearch = async (req, res) => {
 // E-HENTAI SYSTEM (Godfather Mode)
 const handleEHentaiLatest = async (req, res) => {
     try {
-        const feed = await parser.parseURL('https://e-hentai.org/rss/default.xml');
+        // Gunakan axios dulu buat dapet XML-nya dengan headers lengkap
+        const response = await axiosInstance.get('https://e-hentai.org/rss/default.xml');
+        const feed = await parser.parseString(response.data);
+        
         const data = feed.items.map(item => {
-            // Extract ID and Token from link: https://e-hentai.org/g/ID/TOKEN/
             const parts = item.link.split('/g/')[1].split('/');
             const id = parts[0];
             const token = parts[1];
-            
-            // Extract cover from content: <img src="..." />
             const coverMatch = item.content.match(/src="([^"]+)"/);
             const coverUrl = coverMatch ? coverMatch[1] : null;
 
@@ -1004,9 +1004,12 @@ const handleEHentaiLatest = async (req, res) => {
                 source: 'secret'
             };
         });
+
+        if (data.length === 0) throw new Error('Empty RSS');
         res.json({ status: "success", data });
     } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
+        console.log('EHentai RSS Failed, Falling back to Secret MangaDex...');
+        handleSecretLatest(req, res); // Fallback ke MangaDex-X kalau E-Hentai macet
     }
 };
 
@@ -1087,12 +1090,6 @@ app.get('/api/secret/chapter/:id/:token', (req, res) => {
     app.get(`/api/${src}/chapter/:id`, (req, res) => handleGenericChapter(req, res, src));
 });
 
-// nhentai routes
-app.get('/api/nhentai/latest', handleNhentaiLatest);
-app.get('/api/nhentai/popular', handleNhentaiLatest);
-app.get('/api/nhentai/search', handleNhentaiSearch);
-app.get('/api/nhentai/manga/:id', handleNhentaiDetail);
-app.get('/api/nhentai/chapter/:id', handleNhentaiPages);
 
 // SOURCE STATUS CHECKER (Mihon Style)
 app.get('/api/sources/status', async (req, res) => {
