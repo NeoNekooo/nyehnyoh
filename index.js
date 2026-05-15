@@ -92,13 +92,38 @@ const MANGANATO_BASE = 'https://manganato.com';
 const KOMIKCAST_BASE = 'https://komikcast.bz';
 
 // Fungsi Proxy biar gak diblokir ISP
-const proxyImg = (url) => {
+const proxyImg = (url, useInternal = false) => {
     if (!url) return null;
-    // Bersihkan parameter resize dari Komiku biar gak gepeng/jelek
+    if (useInternal || url.includes('nhentai.net')) {
+        // Pake proxy internal kita sendiri buat nembus blokir hotlink nhentai
+        return `https://nyehnyoh.vercel.app/api/proxy-image?url=${encodeURIComponent(url)}`;
+    }
     let cleanUrl = url.split('?')[0];
-    // Pakai weserv buat nge-crop otomatis ke rasio portrait (3:4 atau 2:3) biar rapi di UI
     return `https://images.weserv.nl/?url=${encodeURIComponent(cleanUrl)}&w=300&h=450&fit=cover&a=top&default=${encodeURIComponent(url)}`;
 };
+
+// Jalur Logistik Rahasia (Image Proxy Internal)
+app.get('/api/proxy-image', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).send('URL required');
+
+        const response = await axios({
+            method: 'get',
+            url: url,
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Referer': 'https://nhentai.net/'
+            }
+        });
+
+        res.set('Content-Type', response.headers['content-type']);
+        response.data.pipe(res);
+    } catch (error) {
+        res.status(500).send('Error proxying image');
+    }
+});
 
 const GENRES = {
     'Action': '391b0423-db2a-4b90-b076-581e053926bd',
@@ -901,7 +926,9 @@ const handleGenericChapter = async (req, res, source) => {
 const handleNhentaiLatest = async (req, res) => {
     try {
         const { page = 1 } = req.query;
-        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/all?page=${page}`);
+        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/all?page=${page}`, {
+            headers: { 'Referer': 'https://nhentai.net/' }
+        });
         const data = response.data.result.map(g => ({
             id: g.id.toString(),
             title: g.title.pretty || g.title.english,
@@ -917,7 +944,9 @@ const handleNhentaiLatest = async (req, res) => {
 const handleNhentaiSearch = async (req, res) => {
     try {
         const { q, page = 1 } = req.query;
-        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/search?query=${q}&page=${page}`);
+        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/search?query=${q}&page=${page}`, {
+            headers: { 'Referer': 'https://nhentai.net/' }
+        });
         const data = response.data.result.map(g => ({
             id: g.id.toString(),
             title: g.title.pretty || g.title.english,
@@ -933,7 +962,9 @@ const handleNhentaiSearch = async (req, res) => {
 const handleNhentaiDetail = async (req, res) => {
     try {
         const { id } = req.params;
-        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`);
+        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`, {
+            headers: { 'Referer': 'https://nhentai.net/' }
+        });
         const g = response.data;
         
         const chapters = [{
@@ -959,7 +990,9 @@ const handleNhentaiDetail = async (req, res) => {
 const handleNhentaiPages = async (req, res) => {
     try {
         const { id } = req.params;
-        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`);
+        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`, {
+            headers: { 'Referer': 'https://nhentai.net/' }
+        });
         const g = response.data;
         const extMap = { 'j': 'jpg', 'p': 'png', 'g': 'gif' };
         
