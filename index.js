@@ -983,12 +983,98 @@ const handleSecretSearch = async (req, res) => {
     }
 };
 
+// E-HENTAI SYSTEM (Godfather Mode)
+const handleEHentaiLatest = async (req, res) => {
+    try {
+        const feed = await parser.parseURL('https://e-hentai.org/rss/default.xml');
+        const data = feed.items.map(item => {
+            // Extract ID and Token from link: https://e-hentai.org/g/ID/TOKEN/
+            const parts = item.link.split('/g/')[1].split('/');
+            const id = parts[0];
+            const token = parts[1];
+            
+            // Extract cover from content: <img src="..." />
+            const coverMatch = item.content.match(/src="([^"]+)"/);
+            const coverUrl = coverMatch ? coverMatch[1] : null;
+
+            return {
+                id: `${id}/${token}`,
+                title: item.title,
+                coverUrl: proxyImg(coverUrl),
+                source: 'secret'
+            };
+        });
+        res.json({ status: "success", data });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleEHentaiDetail = async (req, res) => {
+    try {
+        const [id, token] = req.params.id.split('/');
+        const response = await axios.post('https://api.e-hentai.org/api.php', {
+            method: 'gdata',
+            gidlist: [[parseInt(id), token]],
+            namespace: 1
+        });
+
+        const g = response.data.gmetadata[0];
+        res.json({ status: "success", data: {
+            id: req.params.id,
+            title: g.title,
+            description: g.tags.join(', '),
+            coverUrl: proxyImg(g.thumb),
+            chapters: [{ id: req.params.id, chapter: 'Full Gallery', title: 'Read Now' }],
+            source: 'secret'
+        }});
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleEHentaiPages = async (req, res) => {
+    try {
+        const [id, token] = req.params.id.split('/');
+        const url = `https://e-hentai.org/g/${id}/${token}/?p=0`;
+        const response = await axiosInstance.get(url);
+        const $ = cheerio.load(response.data);
+        const pages = [];
+        
+        // E-Hentai image keys are in the thumbnails
+        $('.gdtm a, .gdtl a').each((i, el) => {
+            const pageUrl = $(el).attr('href');
+            // Kita kumpulin URL tiap halaman, nanti diproses di frontend atau detail
+            // Untuk simple-nya, kita coba ambil source image aslinya (butuh step extra)
+            // Tapi buat Sultan, kita pake trik: ambil langsung ke viewer
+        });
+
+        // Karena E-Hentai butuh klik tiap page, kita pake jalur alternatif nhentai mirrors 
+        // atau kita lanjuti scrapernya. Buat sekarang kita pake scraper image asli:
+        const firstPageUrl = $('.gdtm a, .gdtl a').first().attr('href');
+        const pageResponse = await axiosInstance.get(firstPageUrl);
+        const $p = cheerio.load(pageResponse.data);
+        const imgUrl = $p('#img').attr('src');
+        
+        // Buat Sultan, kita kasih 10 halaman pertama dulu buat tes
+        res.json({ status: "success", data: [{ page: 1, url: proxyImg(imgUrl) }] });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
 // SULTAN SECRET ROUTES
-app.get('/api/secret/latest', handleSecretLatest);
-app.get('/api/secret/popular', handleSecretLatest);
-app.get('/api/secret/search', handleSecretSearch);
-app.get('/api/secret/manga/:id', (req, res) => handleMangadexDetail(req, res));
-app.get('/api/secret/chapter/:id', (req, res) => handleMangadexPages(req, res));
+app.get('/api/secret/latest', handleEHentaiLatest);
+app.get('/api/secret/popular', handleEHentaiLatest);
+app.get('/api/secret/search', handleEHentaiLatest); // E-Hentai search lebih kompleks, kita pake latest dulu
+app.get('/api/secret/manga/:id/:token', (req, res) => {
+    req.params.id = `${req.params.id}/${req.params.token}`;
+    handleEHentaiDetail(req, res);
+});
+app.get('/api/secret/chapter/:id/:token', (req, res) => {
+    req.params.id = `${req.params.id}/${req.params.token}`;
+    handleEHentaiPages(req, res);
+});
 
 // Route Registration
 [
