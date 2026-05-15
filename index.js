@@ -798,14 +798,28 @@ const handleGenericLatest = async (req, res, source) => {
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
-        $('.listupd .bs, .listo .bs, .bge').each((i, el) => {
-            const title = $(el).find('h3, .tt').text().trim();
+        // Selector lebih lengkap biar gak gampang boncos
+        $('.listupd .bs, .listo .bs, .bge, .utao, .uta, .imgu, .bsx').each((i, el) => {
+            const title = $(el).find('h3, .tt, .judul').text().trim();
             const link = $(el).find('a').attr('href');
             if (!link) return;
-            const id = link.split('/manga/')[1]?.replace('/', '') || link.split('/komik/')[1]?.replace('/', '');
-            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+
+            // Logika ambil ID yang lebih pinter
+            let id = '';
+            if (link.includes('/manga/')) id = link.split('/manga/')[1].replace(/\//g, '');
+            else if (link.includes('/komik/')) id = link.split('/komik/')[1].replace(/\//g, '');
+            else if (link.includes('/mangas/')) id = link.split('/mangas/')[1].replace(/\//g, '');
             
-            if (id) mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src') || $(el).find('img').attr('data-lazy-src');
+            
+            if (id && title) {
+                mangaList.push({ 
+                    id, 
+                    title, 
+                    coverUrl: proxyImg(coverUrl), 
+                    source 
+                });
+            }
         });
         res.json({ status: "success", data: mangaList });
     } catch (error) {
@@ -821,14 +835,21 @@ const handleGenericSearch = async (req, res, source) => {
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
-        $('.listupd .bs, .listo .bs').each((i, el) => {
-            const title = $(el).find('h3, .tt').text().trim();
+        $('.listupd .bs, .listo .bs, .bge, .utao, .uta, .imgu, .bsx').each((i, el) => {
+            const title = $(el).find('h3, .tt, .judul').text().trim();
             const link = $(el).find('a').attr('href');
             if (!link) return;
-            const id = link.split('/manga/')[1]?.replace('/', '') || link.split('/komik/')[1]?.replace('/', '');
-            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+
+            let id = '';
+            if (link.includes('/manga/')) id = link.split('/manga/')[1].replace(/\//g, '');
+            else if (link.includes('/komik/')) id = link.split('/komik/')[1].replace(/\//g, '');
+            else if (link.includes('/mangas/')) id = link.split('/mangas/')[1].replace(/\//g, '');
             
-            if (id) mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src') || $(el).find('img').attr('data-lazy-src');
+            
+            if (id && title) {
+                mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
+            }
         });
         res.json({ status: "success", data: mangaList });
     } catch (error) {
@@ -843,17 +864,27 @@ const handleGenericDetail = async (req, res, source) => {
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
 
-        const title = $('.entry-title').text().trim();
-        const description = $('.entry-content p').text().trim() || $('.sinopsis p').text().trim();
-        const coverUrl = $('.thumb img').attr('src');
+        const title = $('.entry-title, .judul h1, .postbody h1').first().text().trim();
+        const description = $('.entry-content p, .sinopsis p, .desc, .summary').text().trim();
+        const coverUrl = $('.thumb img, .ims img, .ime img').first().attr('src') || $('.thumb img, .ims img, .ime img').first().attr('data-src');
         
         const chapters = [];
-        $('.clndr a, #chapterlist a').each((i, el) => {
+        $('.clndr a, #chapterlist a, .judulseries a').each((i, el) => {
             const chLink = $(el).attr('href');
             if (chLink) {
-                const chId = chLink.split('/chapter/')[1]?.replace(/\//g, '');
-                const chNum = $(el).find('.chapternum, .ch-num').text().replace('Chapter', '').trim();
-                if (chId) chapters.push({ id: chId, chapter: chNum, title: `Chapter ${chNum}`, language: 'id' });
+                let chId = '';
+                if (chLink.includes('/chapter/')) chId = chLink.split('/chapter/')[1].replace(/\//g, '');
+                else chId = chLink.replace(config.base, '').replace(/\//g, '');
+
+                const chNum = $(el).find('.chapternum, .ch-num, b').text().replace('Chapter', '').trim() || `Ch.${i+1}`;
+                if (chId) {
+                    chapters.push({ 
+                        id: chId, 
+                        chapter: chNum, 
+                        title: `Chapter ${chNum}`, 
+                        language: 'id' 
+                    });
+                }
             }
         });
         res.json({ status: "success", data: { id: req.params.id, title, description, coverUrl: proxyImg(coverUrl), chapters, source } });
