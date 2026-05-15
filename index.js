@@ -88,18 +88,9 @@ const KOMIKU_BASE = 'https://komiku.org';
 const KOMIKU_API = 'https://api.komiku.org';
 const KIRYUU_BASE = 'https://kiryuu.id';
 const WESTMANGA_BASE = 'https://westmanga.info';
-const KOMIKCAST_BASE = 'https://komikcast.bz';
-const KOMIKINDO_BASE = 'https://komikindo.tv';
-const KOMIKAV_BASE = 'https://komikav.com';
-const SEKAIKOMIK_BASE = 'https://sekaikomik.live';
-const KOMIKSTATION_BASE = 'https://komikstation.co';
-const MANHWALAND_BASE = 'https://manhwaland.mom';
-const BACAKOMIK_BASE = 'https://bacakomik.co';
-const KOMIKID_BASE = 'https://komikid.com';
-const MAIDMY_BASE = 'https://maid.my.id';
-const PECINTAKOMIK_BASE = 'https://pecintakomik.com';
-const SHINIGAMI_BASE = 'https://shinigami.me';
 const DOUJINDESU_BASE = 'https://doujindesu.tv';
+const MANGANATO_BASE = 'https://manganato.com';
+const KOMIKCAST_BASE = 'https://komikcast.bz'; // Kita simpen komikcast sebagai cadangan atau hapus (sesuai Big 6)
 
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
@@ -774,18 +765,9 @@ const getSourceConfig = (source) => {
     switch (source) {
         case 'kiryuu': return { base: KIRYUU_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
         case 'westmanga': return { base: WESTMANGA_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'komikcast': return { base: KOMIKCAST_BASE, latestPath: '/daftar-komik/?orderby=modified', popularPath: '/daftar-komik/?orderby=popular' };
-        case 'komikindo': return { base: KOMIKINDO_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'komikav': return { base: KOMIKAV_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'sekaikomik': return { base: SEKAIKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'komikstation': return { base: KOMIKSTATION_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'manhwaland': return { base: MANHWALAND_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'bacakomik': return { base: BACAKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'komikid': return { base: KOMIKID_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'maidmy': return { base: MAIDMY_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'pecintakomik': return { base: PECINTAKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
-        case 'shinigami': return { base: SHINIGAMI_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'manganato': return { base: MANGANATO_BASE, latestPath: '/index.php', popularPath: '/index.php' };
         case 'doujindesu': return { base: DOUJINDESU_BASE, latestPath: '/', popularPath: '/manga/?orderby=popular' };
+        case 'komikcast': return { base: KOMIKCAST_BASE, latestPath: '/daftar-komik/?orderby=modified', popularPath: '/daftar-komik/?orderby=popular' };
         default: return null;
     }
 };
@@ -798,27 +780,21 @@ const handleGenericLatest = async (req, res, source) => {
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
-        // Selector lebih lengkap biar gak gampang boncos
-        $('.listupd .bs, .listo .bs, .bge, .utao, .uta, .imgu, .bsx').each((i, el) => {
-            const title = $(el).find('h3, .tt, .judul').text().trim();
-            const link = $(el).find('a').attr('href');
+        // Selector Doujindesu (.animposx) & MangaNato (.content-homepage-item)
+        $('.listupd .bs, .listo .bs, .bge, .utao, .uta, .imgu, .bsx, .animposx, .content-homepage-item').each((i, el) => {
+            const title = $(el).find('h3, .tt, .judul, .item-title, h4').first().text().trim();
+            const link = $(el).find('a').first().attr('href');
             if (!link) return;
 
-            // Logika ambil ID yang lebih pinter
             let id = '';
-            if (link.includes('/manga/')) id = link.split('/manga/')[1].replace(/\//g, '');
+            if (link.includes('manganato.com/')) id = link.split('manganato.com/')[1].replace(/\//g, '');
+            else if (link.includes('/manga/')) id = link.split('/manga/')[1].replace(/\//g, '');
             else if (link.includes('/komik/')) id = link.split('/komik/')[1].replace(/\//g, '');
-            else if (link.includes('/mangas/')) id = link.split('/mangas/')[1].replace(/\//g, '');
             
             const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src') || $(el).find('img').attr('data-lazy-src');
             
             if (id && title) {
-                mangaList.push({ 
-                    id, 
-                    title, 
-                    coverUrl: proxyImg(coverUrl), 
-                    source 
-                });
+                mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
             }
         });
         res.json({ status: "success", data: mangaList });
@@ -913,9 +889,7 @@ const handleGenericChapter = async (req, res, source) => {
 
 // Route Registration
 [
-    'kiryuu', 'westmanga', 'komikcast', 'komikindo', 'komikav', 
-    'sekaikomik', 'komikstation', 'manhwaland', 'bacakomik', 
-    'komikid', 'maidmy', 'pecintakomik', 'shinigami', 'doujindesu'
+    'kiryuu', 'westmanga', 'manganato', 'doujindesu', 'komikcast'
 ].forEach(src => {
     app.get(`/api/${src}/latest`, (req, res) => handleGenericLatest(req, res, src));
     app.get(`/api/${src}/popular`, (req, res) => handleGenericLatest(req, res, src)); // Popular patternnya mirip buat awal
