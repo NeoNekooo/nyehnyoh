@@ -86,6 +86,20 @@ app.use(express.json());
 const MANGADEX_API = 'https://api.mangadex.org';
 const KOMIKU_BASE = 'https://komiku.org';
 const KOMIKU_API = 'https://api.komiku.org';
+const KIRYUU_BASE = 'https://kiryuu.id';
+const WESTMANGA_BASE = 'https://westmanga.info';
+const KOMIKCAST_BASE = 'https://komikcast.bz';
+const KOMIKINDO_BASE = 'https://komikindo.tv';
+const KOMIKAV_BASE = 'https://komikav.com';
+const SEKAIKOMIK_BASE = 'https://sekaikomik.live';
+const KOMIKSTATION_BASE = 'https://komikstation.co';
+const MANHWALAND_BASE = 'https://manhwaland.mom';
+const BACAKOMIK_BASE = 'https://bacakomik.co';
+const KOMIKID_BASE = 'https://komikid.com';
+const MAIDMY_BASE = 'https://maid.my.id';
+const PECINTAKOMIK_BASE = 'https://pecintakomik.com';
+const SHINIGAMI_BASE = 'https://shinigami.me';
+const DOUJINDESU_BASE = 'https://doujindesu.tv';
 
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
@@ -752,6 +766,131 @@ app.get('/api/admin/seed', async (req, res) => {
     } catch (error) {
         res.status(500).send("Gagal seeding: " + error.message);
     }
+});
+
+// === GENERIC SOURCE SYSTEM (KIRYUU, WESTMANGA, KOMIKCAST) ===
+
+const getSourceConfig = (source) => {
+    switch (source) {
+        case 'kiryuu': return { base: KIRYUU_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'westmanga': return { base: WESTMANGA_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'komikcast': return { base: KOMIKCAST_BASE, latestPath: '/daftar-komik/?orderby=modified', popularPath: '/daftar-komik/?orderby=popular' };
+        case 'komikindo': return { base: KOMIKINDO_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'komikav': return { base: KOMIKAV_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'sekaikomik': return { base: SEKAIKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'komikstation': return { base: KOMIKSTATION_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'manhwaland': return { base: MANHWALAND_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'bacakomik': return { base: BACAKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'komikid': return { base: KOMIKID_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'maidmy': return { base: MAIDMY_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'pecintakomik': return { base: PECINTAKOMIK_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'shinigami': return { base: SHINIGAMI_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
+        case 'doujindesu': return { base: DOUJINDESU_BASE, latestPath: '/', popularPath: '/manga/?orderby=popular' };
+        default: return null;
+    }
+};
+
+const handleGenericLatest = async (req, res, source) => {
+    try {
+        const config = getSourceConfig(source);
+        const url = `${config.base}${config.latestPath}`;
+        const response = await axiosInstance.get(url);
+        const $ = cheerio.load(response.data);
+        const mangaList = [];
+
+        $('.listupd .bs, .listo .bs, .bge').each((i, el) => {
+            const title = $(el).find('h3, .tt').text().trim();
+            const link = $(el).find('a').attr('href');
+            if (!link) return;
+            const id = link.split('/manga/')[1]?.replace('/', '') || link.split('/komik/')[1]?.replace('/', '');
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+            
+            if (id) mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
+        });
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleGenericSearch = async (req, res, source) => {
+    try {
+        const config = getSourceConfig(source);
+        const url = `${config.base}/?s=${encodeURIComponent(req.query.q)}`;
+        const response = await axiosInstance.get(url);
+        const $ = cheerio.load(response.data);
+        const mangaList = [];
+
+        $('.listupd .bs, .listo .bs').each((i, el) => {
+            const title = $(el).find('h3, .tt').text().trim();
+            const link = $(el).find('a').attr('href');
+            if (!link) return;
+            const id = link.split('/manga/')[1]?.replace('/', '') || link.split('/komik/')[1]?.replace('/', '');
+            const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src');
+            
+            if (id) mangaList.push({ id, title, coverUrl: proxyImg(coverUrl), source });
+        });
+        res.json({ status: "success", data: mangaList });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleGenericDetail = async (req, res, source) => {
+    try {
+        const config = getSourceConfig(source);
+        const url = `${config.base}/manga/${req.params.id}/`;
+        const response = await axiosInstance.get(url);
+        const $ = cheerio.load(response.data);
+
+        const title = $('.entry-title').text().trim();
+        const description = $('.entry-content p').text().trim() || $('.sinopsis p').text().trim();
+        const coverUrl = $('.thumb img').attr('src');
+        
+        const chapters = [];
+        $('.clndr a, #chapterlist a').each((i, el) => {
+            const chLink = $(el).attr('href');
+            if (chLink) {
+                const chId = chLink.split('/chapter/')[1]?.replace(/\//g, '');
+                const chNum = $(el).find('.chapternum, .ch-num').text().replace('Chapter', '').trim();
+                if (chId) chapters.push({ id: chId, chapter: chNum, title: `Chapter ${chNum}`, language: 'id' });
+            }
+        });
+        res.json({ status: "success", data: { id: req.params.id, title, description, coverUrl: proxyImg(coverUrl), chapters, source } });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleGenericChapter = async (req, res, source) => {
+    try {
+        const config = getSourceConfig(source);
+        const url = `${config.base}/${req.params.id}/`;
+        const response = await axiosInstance.get(url);
+        const $ = cheerio.load(response.data);
+        const images = [];
+
+        $('#readerarea img').each((i, el) => {
+            const imgUrl = $(el).attr('src') || $(el).attr('data-src');
+            if (imgUrl && !imgUrl.includes('ads')) images.push(proxyImg(imgUrl));
+        });
+        res.json({ status: "success", data: images });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+// Route Registration
+[
+    'kiryuu', 'westmanga', 'komikcast', 'komikindo', 'komikav', 
+    'sekaikomik', 'komikstation', 'manhwaland', 'bacakomik', 
+    'komikid', 'maidmy', 'pecintakomik', 'shinigami', 'doujindesu'
+].forEach(src => {
+    app.get(`/api/${src}/latest`, (req, res) => handleGenericLatest(req, res, src));
+    app.get(`/api/${src}/popular`, (req, res) => handleGenericLatest(req, res, src)); // Popular patternnya mirip buat awal
+    app.get(`/api/${src}/search`, (req, res) => handleGenericSearch(req, res, src));
+    app.get(`/api/${src}/manga/:id`, (req, res) => handleGenericDetail(req, res, src));
+    app.get(`/api/${src}/chapter/:id`, (req, res) => handleGenericChapter(req, res, src));
 });
 
 http.listen(PORT, () => {
