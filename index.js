@@ -7,15 +7,14 @@ const mongoose = require('mongoose');
 const Parser = require('rss-parser');
 const parser = new Parser();
 
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false,
-});
-
 const axiosInstance = axios.create({
-    httpsAgent,
     headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9,id;q=0.8',
+    },
+    timeout: 10000,
+    httpsAgent: new https.Agent({ rejectUnauthorized: false })
 });
 const NodeCache = require('node-cache');
 
@@ -784,20 +783,24 @@ const handleGenericLatest = async (req, res, source) => {
             url = `${config.base}/genre/${genreSlug}/?orderby=modified`;
         }
 
-        const response = await axiosInstance.get(url);
+        const response = await axiosInstance.get(url, {
+            headers: { 'Referer': config.base }
+        });
         const $ = cheerio.load(response.data);
         const mangaList = [];
 
-        // Selector Doujindesu (.animposx) & MangaNato (.content-homepage-item)
         $('.listupd .bs, .listo .bs, .bge, .utao, .uta, .imgu, .bsx, .animposx, .content-homepage-item').each((i, el) => {
             const title = $(el).find('h3, .tt, .judul, .item-title, h4').first().text().trim();
-            const link = $(el).find('a').first().attr('href');
+            let link = $(el).find('a').first().attr('href');
             if (!link) return;
+
+            // Handle relative links
+            if (link.startsWith('/')) link = config.base + link;
 
             let id = '';
             if (link.includes('manganato.com/')) id = link.split('manganato.com/')[1].replace(/\//g, '');
-            else if (link.includes('/manga/')) id = link.split('/manga/')[1].replace(/\//g, '');
-            else if (link.includes('/komik/')) id = link.split('/komik/')[1].replace(/\//g, '');
+            else if (link.includes('/manga/')) id = link.split('/manga/')[1].split('?')[0].replace(/\//g, '');
+            else if (link.includes('/komik/')) id = link.split('/komik/')[1].split('?')[0].replace(/\//g, '');
             
             const coverUrl = $(el).find('img').attr('data-src') || $(el).find('img').attr('src') || $(el).find('img').attr('data-lazy-src');
             
