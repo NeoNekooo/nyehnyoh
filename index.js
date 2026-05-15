@@ -87,7 +87,7 @@ const KOMIKU_BASE = 'https://komiku.org';
 const KOMIKU_API = 'https://api.komiku.org';
 const KIRYUU_BASE = 'https://kiryuu.id';
 const WESTMANGA_BASE = 'https://westmanga.info';
-const NHENTAI_API = 'https://nhentai.net/api';
+const NHENTAI_API = 'https://nhentai.net/api'; // Kita simpen buat cadangan
 const MANGANATO_BASE = 'https://manganato.com';
 const KOMIKCAST_BASE = 'https://komikcast.bz';
 
@@ -922,90 +922,73 @@ const handleGenericChapter = async (req, res, source) => {
     }
 };
 
-// KHUSUS NHENTAI API
-const handleNhentaiLatest = async (req, res) => {
+// SULTAN SECRET API (Powered by MangaDex Unrestricted)
+const handleSecretLatest = async (req, res) => {
     try {
         const { page = 1 } = req.query;
-        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/all?page=${page}`, {
-            headers: { 'Referer': 'https://nhentai.net/' }
+        const offset = (parseInt(page) - 1) * 20;
+        const response = await axiosInstance.get(`${MANGADEX_API}/manga`, {
+            params: {
+                limit: 20,
+                offset: offset,
+                'contentRating[]': 'pornographic',
+                'order[relevance]': 'desc',
+                'includes[]': 'cover_art'
+            }
         });
-        const data = response.data.result.map(g => ({
-            id: g.id.toString(),
-            title: g.title.pretty || g.title.english,
-            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
-            source: 'nhentai'
-        }));
+
+        const data = response.data.data.map(m => {
+            const coverRel = m.relationships.find(r => r.type === 'cover_art');
+            const fileName = coverRel ? coverRel.attributes.fileName : '';
+            return {
+                id: m.id,
+                title: m.attributes.title.en || Object.values(m.attributes.title)[0],
+                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                source: 'secret'
+            };
+        });
         res.json({ status: "success", data });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
 };
 
-const handleNhentaiSearch = async (req, res) => {
+const handleSecretSearch = async (req, res) => {
     try {
         const { q, page = 1 } = req.query;
-        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/search?query=${q}&page=${page}`, {
-            headers: { 'Referer': 'https://nhentai.net/' }
+        const offset = (parseInt(page) - 1) * 20;
+        const response = await axiosInstance.get(`${MANGADEX_API}/manga`, {
+            params: {
+                limit: 20,
+                offset: offset,
+                title: q,
+                'contentRating[]': 'pornographic',
+                'includes[]': 'cover_art'
+            }
         });
-        const data = response.data.result.map(g => ({
-            id: g.id.toString(),
-            title: g.title.pretty || g.title.english,
-            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
-            source: 'nhentai'
-        }));
+
+        const data = response.data.data.map(m => {
+            const coverRel = m.relationships.find(r => r.type === 'cover_art');
+            const fileName = coverRel ? coverRel.attributes.fileName : '';
+            return {
+                id: m.id,
+                title: m.attributes.title.en || Object.values(m.attributes.title)[0],
+                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                source: 'secret'
+            };
+        });
         res.json({ status: "success", data });
     } catch (error) {
         res.status(500).json({ status: "error", message: error.message });
     }
 };
 
-const handleNhentaiDetail = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`, {
-            headers: { 'Referer': 'https://nhentai.net/' }
-        });
-        const g = response.data;
-        
-        const chapters = [{
-            id: g.id.toString(),
-            chapter: 'Full Gallery',
-            title: g.title.english,
-            language: 'jp'
-        }];
-
-        res.json({ status: "success", data: {
-            id: g.id.toString(),
-            title: g.title.pretty || g.title.english,
-            description: g.tags.map(t => t.name).join(', '),
-            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
-            chapters,
-            source: 'nhentai'
-        }});
-    } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
-    }
-};
-
-const handleNhentaiPages = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`, {
-            headers: { 'Referer': 'https://nhentai.net/' }
-        });
-        const g = response.data;
-        const extMap = { 'j': 'jpg', 'p': 'png', 'g': 'gif' };
-        
-        const pages = g.images.pages.map((p, i) => ({
-            page: i + 1,
-            url: proxyImg(`https://i.nhentai.net/galleries/${g.media_id}/${i + 1}.${extMap[p.t] || 'jpg'}`)
-        }));
-
-        res.json({ status: "success", data: pages });
-    } catch (error) {
-        res.status(500).json({ status: "error", message: error.message });
-    }
-};
+// SULTAN SECRET ROUTES
+app.get('/api/secret/latest', handleSecretLatest);
+app.get('/api/secret/popular', handleSecretLatest);
+app.get('/api/secret/search', handleSecretSearch);
+app.get('/api/secret/manga/:id', (req, res) => handleMangadexDetail(req, res));
+app.get('/api/secret/chapter/:id', (req, res) => handleMangadexPages(req, res));
 
 // Route Registration
 [
