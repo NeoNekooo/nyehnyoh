@@ -922,7 +922,7 @@ const handleGenericChapter = async (req, res, source) => {
     }
 };
 
-// SULTAN SECRET API (Powered by MangaDex Unrestricted)
+// INTERNAL ACCESS API (Powered by MangaDex Core)
 const handleSecretLatest = async (req, res) => {
     try {
         const { page = 1 } = req.query;
@@ -1066,7 +1066,7 @@ const handleEHentaiPages = async (req, res) => {
     }
 };
 
-// SULTAN SECRET ROUTES
+// INTERNAL ACCESS ROUTES
 app.get('/api/secret/latest', handleEHentaiLatest);
 app.get('/api/secret/popular', handleEHentaiLatest);
 app.get('/api/secret/search', handleEHentaiLatest); // E-Hentai search lebih kompleks, kita pake latest dulu
@@ -1091,7 +1091,7 @@ app.get('/api/secret/chapter/:id/:token', (req, res) => {
 });
 
 
-// SOURCE STATUS CHECKER (Mihon Style)
+// SOURCE HEALTH MONITORING SYSTEM
 app.get('/api/sources/status', async (req, res) => {
     const sources = [
         { id: 'mangadex', name: 'MangaDex', type: 'API', base: MANGADEX_API },
