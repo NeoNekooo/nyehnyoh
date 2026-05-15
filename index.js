@@ -1115,6 +1115,76 @@ app.get('/api/sources/status', async (req, res) => {
     res.json({ status: "success", data: results });
 });
 
+// PRO OMNI-SEARCH (Search across all sources)
+app.get('/api/search/all', async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q) return res.status(400).json({ status: "error", message: "Query required" });
+
+        const sources = ['mangadex', 'komiku', 'manganato', 'kiryuu', 'westmanga', 'komikcast'];
+        
+        // Cari di semua source secara paralel buat kecepatan maksimal
+        const results = await Promise.all(sources.map(async (src) => {
+            try {
+                const searchRes = await axios.get(`https://nyehnyoh.vercel.app/api/${src}/search?q=${encodeURIComponent(q)}`);
+                return { source: src, results: searchRes.data.data || [] };
+            } catch (e) {
+                return { source: src, results: [] };
+            }
+        }));
+
+        res.json({ status: "success", data: results });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
+// PRO RECOMMENDATIONS (AI-Lite based on history)
+app.get('/api/user/recommendations/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const history = await History.find({ userId }).sort({ timestamp: -1 }).limit(10);
+        
+        if (history.length === 0) {
+            // Kalau belum ada history, kasih yang lagi trending di MangaDex
+            const trending = await axios.get(`https://nyehnyoh.vercel.app/api/mangadex/popular`);
+            return res.json({ status: "success", data: trending.data.data.slice(0, 10) });
+        }
+
+        // Ambil genre yang paling sering dibaca
+        const genres = history.flatMap(h => h.genres).filter(g => g);
+        const topGenre = genres.sort((a, b) => 
+            genres.filter(v => v === a).length - genres.filter(v => v === b).length
+        ).pop();
+
+        // Cari manga serupa di MangaDex
+        const response = await axios.get(`https://api.mangadex.org/manga`, {
+            params: {
+                limit: 10,
+                'includedTags[]': GENRES[topGenre] || GENRES['Action'],
+                'contentRating[]': ['safe', 'suggestive'],
+                'order[relevance]': 'desc',
+                'includes[]': 'cover_art'
+            }
+        });
+
+        const data = response.data.data.map(m => {
+            const coverRel = m.relationships.find(r => r.type === 'cover_art');
+            const fileName = coverRel ? coverRel.attributes.fileName : '';
+            return {
+                id: m.id,
+                title: m.attributes.title.en || Object.values(m.attributes.title)[0],
+                coverUrl: fileName ? `https://uploads.mangadex.org/covers/${m.id}/${fileName}.256.jpg` : null,
+                source: 'mangadex'
+            };
+        });
+
+        res.json({ status: "success", data });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+});
+
 http.listen(PORT, () => {
     console.log(`Realtime Server running on port ${PORT}`);
 });
