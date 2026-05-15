@@ -775,7 +775,15 @@ const getSourceConfig = (source) => {
 const handleGenericLatest = async (req, res, source) => {
     try {
         const config = getSourceConfig(source);
-        const url = `${config.base}${config.latestPath}`;
+        const { tag } = req.query;
+        
+        let url = `${config.base}${config.latestPath}`;
+        // Jika ada tag/genre, ubah jalurnya (beberapa web pake pola /genre/nama-genre/)
+        if (tag) {
+            const genreSlug = tag.toLowerCase().replace(/\s+/g, '-');
+            url = `${config.base}/genre/${genreSlug}/?orderby=modified`;
+        }
+
         const response = await axiosInstance.get(url);
         const $ = cheerio.load(response.data);
         const mangaList = [];
