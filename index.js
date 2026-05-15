@@ -87,9 +87,9 @@ const KOMIKU_BASE = 'https://komiku.org';
 const KOMIKU_API = 'https://api.komiku.org';
 const KIRYUU_BASE = 'https://kiryuu.id';
 const WESTMANGA_BASE = 'https://westmanga.info';
-const DOUJINDESU_BASE = 'https://doujindesu.tv';
+const NHENTAI_API = 'https://nhentai.net/api';
 const MANGANATO_BASE = 'https://manganato.com';
-const KOMIKCAST_BASE = 'https://komikcast.bz'; // Kita simpen komikcast sebagai cadangan atau hapus (sesuai Big 6)
+const KOMIKCAST_BASE = 'https://komikcast.bz';
 
 // Fungsi Proxy biar gak diblokir ISP
 const proxyImg = (url) => {
@@ -765,7 +765,6 @@ const getSourceConfig = (source) => {
         case 'kiryuu': return { base: KIRYUU_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
         case 'westmanga': return { base: WESTMANGA_BASE, latestPath: '/manga/?orderby=modified', popularPath: '/manga/?orderby=popular' };
         case 'manganato': return { base: MANGANATO_BASE, latestPath: '/index.php', popularPath: '/index.php' };
-        case 'doujindesu': return { base: DOUJINDESU_BASE, latestPath: '/', popularPath: '/manga/?orderby=popular' };
         case 'komikcast': return { base: KOMIKCAST_BASE, latestPath: '/daftar-komik/?orderby=modified', popularPath: '/daftar-komik/?orderby=popular' };
         default: return null;
     }
@@ -898,15 +897,123 @@ const handleGenericChapter = async (req, res, source) => {
     }
 };
 
+// KHUSUS NHENTAI API
+const handleNhentaiLatest = async (req, res) => {
+    try {
+        const { page = 1 } = req.query;
+        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/all?page=${page}`);
+        const data = response.data.result.map(g => ({
+            id: g.id.toString(),
+            title: g.title.pretty || g.title.english,
+            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
+            source: 'nhentai'
+        }));
+        res.json({ status: "success", data });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleNhentaiSearch = async (req, res) => {
+    try {
+        const { q, page = 1 } = req.query;
+        const response = await axiosInstance.get(`${NHENTAI_API}/galleries/search?query=${q}&page=${page}`);
+        const data = response.data.result.map(g => ({
+            id: g.id.toString(),
+            title: g.title.pretty || g.title.english,
+            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
+            source: 'nhentai'
+        }));
+        res.json({ status: "success", data });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleNhentaiDetail = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`);
+        const g = response.data;
+        
+        const chapters = [{
+            id: g.id.toString(),
+            chapter: 'Full Gallery',
+            title: g.title.english,
+            language: 'jp'
+        }];
+
+        res.json({ status: "success", data: {
+            id: g.id.toString(),
+            title: g.title.pretty || g.title.english,
+            description: g.tags.map(t => t.name).join(', '),
+            coverUrl: proxyImg(`https://t.nhentai.net/galleries/${g.media_id}/thumb.jpg`),
+            chapters,
+            source: 'nhentai'
+        }});
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
+const handleNhentaiPages = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const response = await axiosInstance.get(`${NHENTAI_API}/gallery/${id}`);
+        const g = response.data;
+        const extMap = { 'j': 'jpg', 'p': 'png', 'g': 'gif' };
+        
+        const pages = g.images.pages.map((p, i) => ({
+            page: i + 1,
+            url: proxyImg(`https://i.nhentai.net/galleries/${g.media_id}/${i + 1}.${extMap[p.t] || 'jpg'}`)
+        }));
+
+        res.json({ status: "success", data: pages });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: error.message });
+    }
+};
+
 // Route Registration
 [
-    'kiryuu', 'westmanga', 'manganato', 'doujindesu', 'komikcast'
+    'kiryuu', 'westmanga', 'manganato', 'komikcast'
 ].forEach(src => {
     app.get(`/api/${src}/latest`, (req, res) => handleGenericLatest(req, res, src));
-    app.get(`/api/${src}/popular`, (req, res) => handleGenericLatest(req, res, src)); // Popular patternnya mirip buat awal
+    app.get(`/api/${src}/popular`, (req, res) => handleGenericLatest(req, res, src));
     app.get(`/api/${src}/search`, (req, res) => handleGenericSearch(req, res, src));
     app.get(`/api/${src}/manga/:id`, (req, res) => handleGenericDetail(req, res, src));
     app.get(`/api/${src}/chapter/:id`, (req, res) => handleGenericChapter(req, res, src));
+});
+
+// nhentai routes
+app.get('/api/nhentai/latest', handleNhentaiLatest);
+app.get('/api/nhentai/popular', handleNhentaiLatest);
+app.get('/api/nhentai/search', handleNhentaiSearch);
+app.get('/api/nhentai/manga/:id', handleNhentaiDetail);
+app.get('/api/nhentai/chapter/:id', handleNhentaiPages);
+
+// SOURCE STATUS CHECKER (Mihon Style)
+app.get('/api/sources/status', async (req, res) => {
+    const sources = [
+        { id: 'mangadex', name: 'MangaDex', type: 'API', base: MANGADEX_API },
+        { id: 'komiku', name: 'Komiku', type: 'API', base: KOMIKU_BASE },
+        { id: 'manganato', name: 'Manganato', type: 'Scraper', base: MANGANATO_BASE },
+        { id: 'kiryuu', name: 'Kiryuu', type: 'Scraper', base: KIRYUU_BASE },
+        { id: 'westmanga', name: 'WestManga', type: 'Scraper', base: WESTMANGA_BASE },
+        { id: 'komikcast', name: 'Komikcast', type: 'Scraper', base: KOMIKCAST_BASE },
+        { id: 'nhentai', name: 'nhentai', type: 'API', base: 'https://nhentai.net' }
+    ];
+
+    const results = await Promise.all(sources.map(async (src) => {
+        try {
+            await axiosInstance.get(src.base, { timeout: 5000 });
+            return { ...src, status: 'online', version: '1.0.4' };
+        } catch (e) {
+            return { ...src, status: 'offline', version: '1.0.4' };
+        }
+    }));
+
+    res.json({ status: "success", data: results });
 });
 
 http.listen(PORT, () => {
